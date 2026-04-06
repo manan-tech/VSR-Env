@@ -31,11 +31,10 @@ The reward system is modular, providing structured feedback across three core ta
 
 ### A. Reward Computer (`reward_computer.py`)
 The [RewardComputer](file:///Users/mananbansal/Desktop/meta/vsr_env/reward/reward_computer.py) calculates decomposed rewards:
-- **Greek Reward**: Incentivizes delta-neutrality (|delta| < 0.05).
-- **Vega Reward**: Rewards correct positioning (short vega) before expected volatility crush events.
-- **Hedge Timing**: Correlates hedge quantity with spot price movement in gamma scalping scenarios.
+- **Greek Reward**: Incentivizes delta-neutrality (|delta| < 0.05). In Expert tasks, this uses a linear sensitivity lookup `max(0, 1.0 - delta / 0.5)`.
+- **Vega Reward**: Rewards correct positioning (short vega) before expected volatility crush events in Hard tasks.
 - **P&L Component**: Sigmoid-normalized profit/loss signal, adjusted for time decay (theta) costs in expert tasks.
-- **Reasoning Component**: Evaluation of the agent's logic ($LLM-centric$).
+- **Reasoning Component**: Evaluation of the agent's logic via keyword hits and numeric consistency scoring.
 
 ---
 
@@ -65,8 +64,8 @@ Each task defines its own initialization and grading logic, which is aggregated 
 Standardized Pydantic models ensure compliance with the OpenEnv specification and provide a clear interface for the agent.
 
 - **`VSRAction`**: Inputs from the agent, including the critical `reasoning` field.
-- **`VSRObservation`**: The market snapshot provided to the agent.
-- **`VSRState`**: Internal ground truth (hidden from the agent).
+- **`VSRObservation`**: Market snapshot including `expected_outcome` for steering.
+- **`VSRState`**: Internal ground truth, including `initial_delta`, `initial_theta`, and task-event schedules (`vol_crush_step`, `regime_shift_step`).
 - **`VSRReward`**: Decomposed reward signal for granular analysis.
 
 ---

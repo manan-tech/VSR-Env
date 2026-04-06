@@ -81,6 +81,7 @@ The agent receives comprehensive market state through `VSRObservation`:
 | `task_name` | str | Current task identifier |
 | `task_description` | str | Task objective description |
 | `last_action_error` | Optional[str] | Validation error from last action (if any) |
+| `expected_outcome` | Optional[str] | Ground-truth expected outcome for the task |
 
 ## Tasks
 
@@ -90,10 +91,8 @@ The agent receives comprehensive market state through `VSRObservation`:
 
 - **Max Steps**: 5
 - **Difficulty**: Medium
-- **Grading**: Score = neutralization_quality × 0.7 + cost_efficiency × 0.3
-  - neutralization_quality = max(0, 1.0 - |final_delta| / |initial_delta|)
-  - cost_efficiency = max(0, 1.0 - total_cost / max_cost)
-- **Per-Step Reward**: delta_improvement × 0.6 + cost_efficiency × 0.4 + neutrality_bonus (0.1 if |delta| < 0.05)
+- **Grading (Episode)**: Score = neutralization_quality × 0.7 + cost_efficiency × 0.3
+- **Per-Step Reward**: delta_improvement × 0.5 + cost_efficiency × 0.3 + neutrality_bonus (0.1 if |delta| < 0.05) + reasoning_coherence × 0.2
 
 ### Task 2: Earnings Vol Crush (Hard)
 
@@ -101,10 +100,8 @@ The agent receives comprehensive market state through `VSRObservation`:
 
 - **Max Steps**: 8
 - **Difficulty**: Hard
-- **Grading**: Score = pre_crush_positioning × 0.40 + post_crush_rehedge × 0.35 + pnl_outcome × 0.25
-  - pre_crush_positioning: Reward for being short vega before the IV drop.
-  - post_crush_rehedge: Average delta neutrality after the crush event.
-  - pnl_outcome: Sigmoid-normalized final P&L.
+- **Grading (Episode)**: Score = pre_crush_positioning × 0.40 + post_crush_rehedge × 0.35 + pnl_outcome × 0.25
+- **Per-Step Reward**: pnl_change × 0.4 + greek_neutrality × 0.3 + reasoning_quality × 0.3
 
 ### Task 3: Gamma Scalping (Expert)
 
@@ -112,10 +109,8 @@ The agent receives comprehensive market state through `VSRObservation`:
 
 - **Max Steps**: 10
 - **Difficulty**: Expert
-- **Grading**: Score = rehedge_quality × 0.40 + pnl_above_theta × 0.35 + timing_score × 0.25
-  - rehedge_quality: Average delta neutrality throughout the episode.
-  - pnl_above_theta: Profit after accounting for time decay (theta) costs.
-  - timing_score: Correlation between spot moves and hedge timing.
+- **Grading (Episode)**: Score = rehedge_quality × 0.40 + pnl_above_theta × 0.35 + timing_score × 0.25
+- **Per-Step Reward**: delta_neutrality × 0.5 + pnl_change × 0.3 + reasoning_quality × 0.2
 
 ## Installation
 
@@ -231,9 +226,9 @@ The `inference.py` script demonstrates environment usage with an LLM agent:
 
 ```bash
 # Set environment variables
-export API_BASE_URL="https://api.groq.com/openai/v1"
-export GROQ_API_KEY="your-groq-api-key"
-export MODEL_NAME="llama-3.3-70b-versatile"
+export API_BASE_URL="https://router.huggingface.co/v1"
+export HF_TOKEN="your-huggingface-token"
+export MODEL_NAME="Qwen/Qwen2.5-72B-Instruct"
 
 # Run inference
 python inference.py
@@ -253,10 +248,10 @@ The script runs all three tasks sequentially and outputs progress in the require
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `API_BASE_URL` | No | `https://api.groq.com/openai/v1` | API endpoint for the LLM |
-| `MODEL_NAME` | No | `llama-3.3-70b-versatile` | Model identifier for inference |
-| `GROQ_API_KEY` | Yes | - | Groq API key |
-| `HF_TOKEN` | Yes | - | Hugging Face API key (alternative) |
+| `API_BASE_URL` | No | `https://router.huggingface.co/v1` | API endpoint for the LLM |
+| `MODEL_NAME` | No | `Qwen/Qwen2.5-72B-Instruct` | Model identifier for inference |
+| `HF_TOKEN` | Yes | - | Hugging Face API key (also accepts `API_KEY`) |
+| `IMAGE_NAME` | No | `vsr-env:latest` | Docker image name for deployment |
 | `LOG_LEVEL` | No | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
 ## Architecture
