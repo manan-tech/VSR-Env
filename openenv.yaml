@@ -1,0 +1,32 @@
+# OpenEnv manifest for VSR-Env
+# Requirements: 1.6, 20.1
+
+name: vsr-env
+version: 1.0.0
+description: Volatility Surface Reasoning Environment for options portfolio management
+
+# Task definitions (Requirements: 2.1, 2.2, 2.3)
+tasks:
+  - name: iv_reading
+    description: Identify mispriced options on the implied volatility surface
+    max_steps: 3
+    difficulty: easy
+  - name: delta_hedging
+    description: Neutralize portfolio delta cost-efficiently
+    max_steps: 5
+    difficulty: medium
+  - name: arb_capture
+    description: Execute full arbitrage workflow with regime shifts
+    max_steps: 8
+    difficulty: hard
+
+# Type definitions (Requirement 1.6)
+action_type: VSRAction
+observation_type: VSRObservation
+reward_type: VSRReward
+state_type: VSRState
+
+# Server configuration
+server:
+  host: 0.0.0.0
+  port: 8000

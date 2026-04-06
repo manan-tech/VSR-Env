@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VSR-Env | Volatility Surface Explorer</title>
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --surface: #13141a;
+            --surface-hover: #1c1d25;
+            --border: #282a36;
+            --text-main: #f8f8f2;
+            --text-dim: #8b92a5;
+            --accent: #bd93f9;
+            --green: #50fa7b;
+            --red: #ff5555;
+            --cyan: #8be9fd;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        h1, h2, h3 {
+            margin-top: 0;
+            font-weight: 600;
+        }
+
+        h1 { font-size: 1.5rem; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
+        
+        .badge {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: bold;
+        }
+
+        /* Tables for Options Chain */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-variant-numeric: tabular-nums;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: right;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            color: var(--text-dim);
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        
+        th.center, td.center { text-align: center; }
+
+        tr:hover td {
+            background: var(--surface-hover);
+        }
+
+        .strike-col { font-weight: bold; color: var(--text-main); }
+        .iv-hl { color: var(--cyan); }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        select, input, button {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--accent);
+        }
+
+        button {
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        button.secondary {
+            background: var(--bg);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+        }
+        
+        button.secondary:hover {
+            border-color: var(--text-main);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: var(--bg);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .stat-label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; }
+        .stat-val { font-size: 1.2rem; font-weight: bold; margin-top: 4px; }
+        
+        .pos { color: var(--green); }
+        .neg { color: var(--red); }
+
+        /* Logs */
+        .log-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            height: 200px;
+            overflow-y: auto;
+            color: var(--text-dim);
+            margin-top: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .log-entry.info { color: var(--text-main); }
+        .log-entry.success { color: var(--green); }
+    </style>
+</head>
+<body>
+
+    <!-- LEFT PANEL: Surface & Env Data -->
+    <div class="panel">
+        <h1>VSR-Env <span class="badge" id="task-badge">Task: iv_reading</span></h1>
+        
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-label">Spot Price</div>
+                <div class="stat-val" id="spot-price">$100.00</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Time to maturity</div>
+                <div class="stat-val" id="ttm">30 Days</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Portfolio Delta</div>
+                <div class="stat-val" id="delta">0.00</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Total Reward</div>
+                <div class="stat-val accent" id="reward">0.00</div>
+            </div>
+        </div>
+
+        <h3>Volatility Surface (ATM = 100)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th class="center">Strike Idx</th>
+                    <th class="center">Strike</th>
+                    <th>30d IV</th>
+                    <th>90d IV</th>
+                    <th>180d IV</th>
+                </tr>
+            </thead>
+            <tbody id="options-table">
+                <!-- Populated via JS -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- RIGHT PANEL: Action & Controls -->
+    <div class="panel">
+        <h2>Take Action</h2>
+        <div class="stats-grid">
+             <div class="stat-box">
+                <div class="stat-label">Step</div>
+                <div class="stat-val" id="step-counter">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Status</div>
+                <div class="stat-val" id="status-label">Ready</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="input-group">
+                <label>Strike Index</label>
+                <input type="number" id="strike-idx" value="4" min="0" max="7" />
+            </div>
+            
+            <div class="input-group">
+                <label>Maturity Index</label>
+                <select id="maturity-idx">
+                    <option value="0">0 (30 Days)</option>
+                    <option value="1">1 (90 Days)</option>
+                </select>
+            </div>
+            
+            <div class="input-group">
+                <label>Direction</label>
+                <select id="direction">
+                    <option value="buy">Buy</option>
+                    <option value="sell">Sell</option>
+                    <option value="hold">Hold (No trade)</option>
+                </select>
+            </div>
+            
+            <div class="input-group">
+                <label>Quantity</label>
+                <input type="number" id="quantity" step="0.1" value="1.0" />
+            </div>
+
+            <button onclick="submitStep()" id="step-btn">Execute Trade</button>
+
+            <div style="margin-top:20px; border-top: 1px solid #282a36; padding-top:20px;">
+                <div class="input-group">
+                    <label>Environment Task</label>
+                    <select id="task-select">
+                        <option value="iv_reading">iv_reading (Easy)</option>
+                        <option value="delta_hedging">delta_hedging (Medium)</option>
+                        <option value="arb_capture">arb_capture (Hard)</option>
+                    </select>
+                </div>
+                <button onclick="resetEnv()" class="secondary">Reset Environment</button>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 20px;">Logs</h3>
+        <div class="log-box" id="logs">
+            <div class="log-entry">Waiting for environment reset...</div>
+        </div>
+    </div>
+
+    <script>
+        const STRIKES = [85, 90, 95, 97.5, 100, 102.5, 105, 110];
+        let cumulativeReward = 0;
+        let currentStep = 0;
+
+        function log(msg, type='info') {
+            const box = document.getElementById('logs');
+            const el = document.createElement('div');
+            el.className = `log-entry ${type}`;
+            el.innerText = `> ${msg}`;
+            box.appendChild(el);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        async function resetEnv() {
+            const task = document.getElementById('task-select').value;
+            document.getElementById('task-badge').innerText = `Task: ${task}`;
+            document.getElementById('step-btn').disabled = false;
+            document.getElementById('status-label').innerText = 'Active';
+            document.getElementById('status-label').style.color = 'var(--text-main)';
+            
+            cumulativeReward = 0;
+            currentStep = 0;
+            
+            log(`Resetting environment natively for task: ${task}`);
+            
+            try {
+                const res = await fetch('/reset', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ task_name: task, seed: Math.floor(Math.random() * 1000) })
+                });
+                
+                if(!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                updateUI(data.observation, 0.0);
+                log('Environment reset complete.', 'success');
+            } catch(e) {
+                log(`Error: ${e.message}`, 'neg');
+            }
+        }
+
+        async function submitStep() {
+            if(document.getElementById('step-btn').disabled) return;
+            
+            const strike = parseInt(document.getElementById('strike-idx').value);
+            const mat = parseInt(document.getElementById('maturity-idx').value);
+            const dir = document.getElementById('direction').value;
+            const qty = parseFloat(document.getElementById('quantity').value);
+            
+            log(`Executing step: action=${dir.toUpperCase()} strike_idx=${strike} qty=${qty}`);
+            
+            try {
+                const res = await fetch('/step', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        selected_strike: strike,
+                        selected_maturity: mat,
+                        direction: dir,
+                        quantity: qty,
+                        reasoning: "Manual UI override"
+                    })
+                });
+                
+                if(!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                
+                currentStep++;
+                cumulativeReward += data.reward;
+                
+                log(`Step completed. Reward: +${data.reward.toFixed(4)}`, 'success');
+                updateUI(data.observation, cumulativeReward);
+                
+                if(data.done) {
+                    document.getElementById('step-btn').disabled = true;
+                    document.getElementById('status-label').innerText = 'Done';
+                    document.getElementById('status-label').style.color = 'var(--accent)';
+                    log(`Episode Done! Final Score: ${cumulativeReward.toFixed(4)}`, 'accent');
+                }
+            } catch(e) {
+                log(`Error: ${e.message}`, 'neg');
+            }
+        }
+
+        function updateUI(obs, totalReward) {
+            document.getElementById('reward').innerText = totalReward.toFixed(4);
+            document.getElementById('step-counter').innerText = currentStep;
+            
+            // Format delta
+            const delta = obs.portfolio_greeks.delta || 0;
+            const deltaEl = document.getElementById('delta');
+            deltaEl.innerText = delta.toFixed(4);
+            deltaEl.className = `stat-val ${delta > 0.05 ? 'pos' : (delta < -0.05 ? 'neg' : '')}`;
+            
+            // Rebuild option chain table
+            const tbody = document.getElementById('options-table');
+            tbody.innerHTML = '';
+            
+            for(let i=0; i<8; i++) {
+                const tr = document.createElement('tr');
+                
+                // Get IVs for this strike across all maturities
+                const iv30 = obs.iv_surface[i][0];
+                const iv90 = obs.iv_surface[i][1];
+                const iv180 = obs.iv_surface[i][2];
+                
+                // Render row
+                tr.innerHTML = `
+                    <td class="center badge" style="background:#282a36;color:#f8f8f2">${i}</td>
+                    <td class="center strike-col">${STRIKES[i]}</td>
+                    <td class="iv-hl">${(iv30 * 100).toFixed(2)}%</td>
+                    <td class="iv-hl">${(iv90 * 100).toFixed(2)}%</td>
+                    <td class="iv-hl">${(iv180 * 100).toFixed(2)}%</td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        // Initialize on load
+        window.addEventListener('load', resetEnv);
+    </script>
+</body>
+</html>
