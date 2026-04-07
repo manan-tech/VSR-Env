@@ -19,13 +19,14 @@ class VolRegimeDetectionTask:
         self.regimes = {"low": 0.01, "normal": 0.04, "high": 0.09}
         self.selected_regime = "normal"
 
-    def initialize(self, state: VSRState, seed: int) -> Dict[str, Any]:
+    def initialize(self, state: VSRState, rng: Any = None) -> Dict[str, Any]:
         """Set up the volatility regime challenge."""
-        np.random.seed(seed)
+        if rng is None:
+            rng = np.random.RandomState()
 
         # Randomly select a regime
         regimes_list = list(self.regimes.keys())
-        self.selected_regime = np.random.choice(regimes_list)
+        self.selected_regime = rng.choice(regimes_list)
         state.variance = self.regimes[self.selected_regime]
         state.regime = self.selected_regime
         state.expected_outcome = self.selected_regime
