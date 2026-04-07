@@ -37,16 +37,26 @@ MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
 BENCHMARK = "vsr_env"
 
 # Task configurations (Requirements: 12.2, 12.6)
-TASKS = ["delta_hedging", "earnings_vol_crush", "gamma_scalping"]
+TASKS = [
+    "vol_regime_detection",
+    "delta_hedging",
+    "earnings_vol_crush",
+    "gamma_scalping",
+    "vega_gamma_stress",
+]
 MAX_STEPS_PER_TASK = {
+    "vol_regime_detection": 1,
     "delta_hedging": 5,
     "earnings_vol_crush": 8,
     "gamma_scalping": 10,
+    "vega_gamma_stress": 10,
 }
 TASK_SEEDS = {
+    "vol_regime_detection": 101,
     "delta_hedging": 123,
     "earnings_vol_crush": 456,
     "gamma_scalping": 789,
+    "vega_gamma_stress": 999,
 }
 
 # LLM configuration
@@ -538,22 +548,33 @@ async def main() -> None:
     # Initialize environment
     env = VSREnvironment()
 
-    # Run all three tasks sequentially
+    # Run all tasks sequentially (Adaptive Curriculum)
     scores = {}
 
     for task_name in TASKS:
         seed = TASK_SEEDS[task_name]
         score = await run_task(client, env, task_name, seed)
         scores[task_name] = score
+
+        # Adaptive Curriculum: Break if the baseline score isn't met
+        if score < 0.3:
+            print()
+            print(
+                f"[{task_name.upper()} FAILED] Score {score:.2f} < 0.3. Halting curriculum early."
+            )
+            break
+
         print()  # Blank line between tasks
 
     # Print final summary
     print("=" * 60)
-    print("FINAL SUMMARY")
+    print("FINAL SUMMARY (ADAPTIVE CURRICULUM)")
     print("=" * 60)
     for task_name, score in scores.items():
         print(f"  {task_name}: {score:.2f}")
-    print(f"  Average: {sum(scores.values()) / len(scores):.2f}")
+
+    if len(scores) > 0:
+        print(f"  Average Completed: {sum(scores.values()) / len(scores):.2f}")
     print("=" * 60)
 
 
