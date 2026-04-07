@@ -6,10 +6,12 @@ version: 1.0.0
 description: Volatility Surface Reasoning Environment for options portfolio management
 
 # Task definitions (Requirements: 2.1, 2.2, 2.3)
-tasks:  - name: vol_regime_detection
+tasks:
+  - name: vol_regime_detection
     description: Identify the current market volatility regime based purely on the given IV surface
     max_steps: 1
-    difficulty: easy  - name: delta_hedging
+    difficulty: easy
+  - name: delta_hedging
     description: Neutralize portfolio delta through a market shock event
     max_steps: 5
     difficulty: medium

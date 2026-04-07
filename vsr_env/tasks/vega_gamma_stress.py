@@ -98,9 +98,9 @@ class VegaGammaStressGrader:
             keywords=["vega", "gamma", "shock", "hedge", "convexity", "crash"]
         )
 
-    def score(self, episode_history: Dict[str, Any], state: VSRState) -> float:
+    def score(self, episode_history: List[Dict[str, Any]], state: VSRState) -> float:
         """Compute the final grade using strict standard deviation bounds."""
-        steps = episode_history.get("steps", [])
+        steps = episode_history
         if not steps:
             return 0.0
 
@@ -112,10 +112,18 @@ class VegaGammaStressGrader:
         # Analyze trajectory leading up to the shock
         for i, step in enumerate(steps):
             if i + 1 < shock_step:
-                obs = step.get("observation", {})
-                greeks = obs.get("portfolio_greeks", {})
-                pre_shock_vegas.append(greeks.get("vega", -5.0))
-                pre_shock_gammas.append(greeks.get("gamma", -5.0))
+                obs = step.get("observation")
+                if obs:
+                    greeks = getattr(obs, "portfolio_greeks", {})
+                    if hasattr(greeks, "get"):
+                        pre_shock_vegas.append(greeks.get("vega", -5.0))
+                        pre_shock_gammas.append(greeks.get("gamma", -5.0))
+                    elif isinstance(greeks, dict):
+                        pre_shock_vegas.append(greeks.get("vega", -5.0))
+                        pre_shock_gammas.append(greeks.get("gamma", -5.0))
+                    else:
+                        pre_shock_vegas.append(getattr(greeks, "vega", -5.0))
+                        pre_shock_gammas.append(getattr(greeks, "gamma", -5.0))
 
         # 1. Vega/Gamma Neutrality via SD Bounds (50% of Grade)
         # Target: Neutralize near 0. If SD bounds are extremely narrow and close to 0, score high.
@@ -143,10 +151,17 @@ class VegaGammaStressGrader:
         # 3. Reasoning Analysis (20% of Grade)
         reasoning_score = 0.0
         if steps:
-            all_reasoning = " ".join(
-                [s.get("action", {}).get("reasoning", "") for s in steps]
-            )
-            reasoning_score = self.reasoning_rubric.evaluate(all_reasoning)
+            reasonings = []
+            for s in steps:
+                act = s.get("action")
+                if act:
+                    r = getattr(act, "reasoning", "")
+                    if not r and isinstance(act, dict):
+                        r = act.get("reasoning", "")
+                    if r:
+                        reasonings.append(r)
+            all_reasoning = " ".join(reasonings)
+            reasoning_score = float(self.reasoning_rubric.score(all_reasoning, None))
 
         final_score = (vg_score * 0.5) + (pnl_score * 0.3) + (reasoning_score * 0.2)
         return float(np.clip(final_score, 0.0, 1.0))
