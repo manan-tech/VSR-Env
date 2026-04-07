@@ -21,6 +21,10 @@ tasks:  - name: vol_regime_detection
     description: Profit from gamma scalping through spot oscillations
     max_steps: 10
     difficulty: expert
+  - name: vega_gamma_stress
+    description: Survive a catastrophic dual market shock by neutralizing risk boundaries beforehand
+    max_steps: 10
+    difficulty: super-boss
 
 # Type definitions (Requirement 1.6)
 action_type: VSRAction

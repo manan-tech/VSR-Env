@@ -10,10 +10,12 @@ from vsr_env.tasks.delta_hedging import DeltaHedgingTask
 from vsr_env.tasks.earnings_vol_crush import EarningsVolCrushTask
 from vsr_env.tasks.gamma_scalping import GammaScalpingTask
 from vsr_env.tasks.vol_regime_detection import VolRegimeDetectionTask
+from vsr_env.tasks.vega_gamma_stress import VegaGammaStressTask
 
 __all__ = [
     "DeltaHedgingTask",
     "EarningsVolCrushTask",
     "GammaScalpingTask",
     "VolRegimeDetectionTask",
+    "VegaGammaStressTask",
 ]
