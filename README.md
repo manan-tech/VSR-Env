@@ -1,3 +1,12 @@
+---
+title: VSR-Env
+emoji: 📈
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # VSR-Env: Volatility Surface Reasoning Environment
 
 VSR-Env is a reinforcement learning benchmark for options portfolio management and derivatives reasoning, built for the Meta PyTorch OpenEnv Hackathon.
