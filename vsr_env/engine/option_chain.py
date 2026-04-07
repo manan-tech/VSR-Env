@@ -233,7 +233,9 @@ class OptionChainEngine:
 
         for _ in range(max_iter):
             # Compute price at current sigma
-            price = self.bs_price(S, np.array([K]), np.array([T]), np.array([sigma]), option_type)[0]
+            price = self.bs_price(
+                S, np.array([K]), np.array([T]), np.array([sigma]), option_type
+            )[0]
 
             # Compute vega (undo the /100 scaling from vega method)
             v = self.vega(S, np.array([K]), np.array([T]), np.array([sigma]))[0] * 100
@@ -285,7 +287,12 @@ class OptionChainEngine:
 
         def objective(sigma: float) -> float:
             """Objective function: price(sigma) - market_price = 0"""
-            return self.bs_price(S, np.array([K]), np.array([T]), np.array([sigma]), option_type)[0] - market_price
+            return (
+                self.bs_price(
+                    S, np.array([K]), np.array([T]), np.array([sigma]), option_type
+                )[0]
+                - market_price
+            )
 
         try:
             # Search range [0.01, 5.0] per Requirement 8.2

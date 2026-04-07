@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 class TradeDirection(str, Enum):
     """Trade direction enum for action specification.
-    
+
     Valid values:
         BUY: Purchase contracts (add positive position)
         SELL: Sell contracts (add negative position)
@@ -25,10 +25,10 @@ class TradeDirection(str, Enum):
 
 class VSRAction(BaseModel):
     """Action model for agent decisions.
-    
+
     Defines the action space for trading on the volatility surface.
     Agents select a strike, maturity, direction, and quantity.
-    
+
     Attributes:
         selected_strike: Strike index (0-7) into STRIKES array
         selected_maturity: Maturity index (0-2) into MATURITIES array
@@ -67,10 +67,10 @@ class VSRAction(BaseModel):
 
 class VSRObservation(BaseModel):
     """Observation model for environment state visible to agent.
-    
+
     Provides comprehensive market state including IV surface,
     portfolio Greeks, P&L, and task information.
-    
+
     Attributes:
         iv_surface: 8×3 implied volatility matrix
         spot_price: Current underlying price
@@ -127,6 +127,12 @@ class VSRObservation(BaseModel):
         "",
         description="Task objective description for agent",
     )
+    earnings_proximity: float = Field(
+        1.0,
+        ge=0.0,
+        le=1.0,
+        description="Proximity float decreasing from 1.0 to 0.0 leading up to the vol crush",
+    )
     last_action_error: Optional[str] = Field(
         None,
         description="Validation error from last action (if any)",
@@ -139,10 +145,10 @@ class VSRObservation(BaseModel):
 
 class VSRState(BaseModel):
     """Internal state model including hidden information.
-    
+
     Tracks all environment state including ground truth for grading,
     market simulation parameters, and portfolio details.
-    
+
     Attributes:
         episode_id: Unique episode identifier
         step_count: Steps taken in current episode
@@ -236,6 +242,12 @@ class VSRState(BaseModel):
         default_factory=list,
         description="List of mispriced cell specs for grading",
     )
+    earnings_proximity: float = Field(
+        1.0,
+        ge=0.0,
+        le=1.0,
+        description="Proximity float decreasing from 1.0 to 0.0 leading up to the vol crush",
+    )
     expected_outcome: Optional[str] = Field(
         None,
         description="Ground-truth expected outcome for grader",
@@ -244,10 +256,10 @@ class VSRState(BaseModel):
 
 class VSRReward(BaseModel):
     """Reward model with component breakdown.
-    
+
     Provides structured reward decomposition for analysis of
     which components drive agent behavior.
-    
+
     Attributes:
         total: Aggregate reward for step
         pnl_component: Profit/loss contribution

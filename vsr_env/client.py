@@ -5,7 +5,7 @@ for fast local testing.
 """
 
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Optional
 import httpx
 
 from vsr_env.models import VSRAction, VSRObservation, VSRState
@@ -14,6 +14,7 @@ from vsr_env.server.vsr_environment import VSREnvironment
 
 class SyncWrapper:
     """Wrapper to make async methods synchronous."""
+
     def __init__(self, async_client):
         self.async_client = async_client
 
@@ -22,13 +23,19 @@ class SyncWrapper:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        asyncio.get_event_loop().run_until_complete(self.async_client.__aexit__(exc_type, exc_val, exc_tb))
+        asyncio.get_event_loop().run_until_complete(
+            self.async_client.__aexit__(exc_type, exc_val, exc_tb)
+        )
 
     def reset(self, task_name: str = "delta_hedging", seed: int = 42):
-        return asyncio.get_event_loop().run_until_complete(self.async_client.reset(task_name, seed))
+        return asyncio.get_event_loop().run_until_complete(
+            self.async_client.reset(task_name, seed)
+        )
 
     def step(self, action: VSRAction):
-        return asyncio.get_event_loop().run_until_complete(self.async_client.step(action))
+        return asyncio.get_event_loop().run_until_complete(
+            self.async_client.step(action)
+        )
 
     def state(self):
         return asyncio.get_event_loop().run_until_complete(self.async_client.state())
@@ -59,14 +66,16 @@ class VSREnv:
         """Reset the remote environment."""
         if not self.client:
             raise RuntimeError("Client must be used as a context manager")
-            
+
         class ResetResult:
             def __init__(self, obs_dict):
                 self.observation = VSRObservation(**obs_dict)
                 self.done = False
                 self.reward = 0.0
-                
-        resp = await self.client.post("/reset", json={"task_name": task_name, "seed": seed})
+
+        resp = await self.client.post(
+            "/reset", json={"task_name": task_name, "seed": seed}
+        )
         resp.raise_for_status()
         data = resp.json()
         return ResetResult(data["observation"])
@@ -75,14 +84,14 @@ class VSREnv:
         """Step the remote environment."""
         if not self.client:
             raise RuntimeError("Client must be used as a context manager")
-            
+
         class StepResult:
             def __init__(self, data):
                 self.observation = VSRObservation(**data["observation"])
                 self.reward = data["reward"]
                 self.done = data["done"]
                 self.info = data.get("info", {})
-                
+
         resp = await self.client.post("/step", json=action.model_dump(mode="json"))
         resp.raise_for_status()
         return StepResult(resp.json())
@@ -98,7 +107,7 @@ class VSREnv:
 
 class LocalVSREnv:
     """In-process environment client matching the VSREnv interface.
-    
+
     Useful for blazingly fast local testing by bypassing HTTP overhead.
     """
 
@@ -116,25 +125,25 @@ class LocalVSREnv:
 
     async def reset(self, task_name: str = "delta_hedging", seed: int = 42):
         obs = self.env.reset(task_name=task_name, seed=seed)
-        
+
         class ResetResult:
             def __init__(self, observation):
                 self.observation = observation
                 self.done = False
                 self.reward = 0.0
-                
+
         return ResetResult(obs)
 
     async def step(self, action: VSRAction):
         result = self.env.step(action)
-        
+
         class StepResult:
             def __init__(self, data):
                 self.observation = data["observation"]
                 self.reward = data["reward"]
                 self.done = data["done"]
                 self.info = data.get("info", {})
-                
+
         return StepResult(result)
 
     async def state(self) -> VSRState:

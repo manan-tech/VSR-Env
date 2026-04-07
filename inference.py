@@ -25,7 +25,8 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
-from vsr_env.models import TradeDirection, VSRAction, VSRObservation, VSRState
+from vsr_env.models import TradeDirection, VSRAction, VSRObservation
+from vsr_env.server.vsr_environment import VSREnvironment
 
 # Environment configuration
 # Groq endpoint (judges will substitute this)
@@ -58,8 +59,7 @@ SUCCESS_SCORE_THRESHOLD = 0.1
 
 # System prompts for each task (Requirement: 12.1)
 SYSTEM_PROMPTS = {
-    "delta_hedging": textwrap.dedent(
-        """
+    "delta_hedging": textwrap.dedent("""
         You are a portfolio risk manager at an options trading desk.
         
         Your portfolio has non-zero delta exposure. Your objective is to achieve
@@ -76,11 +76,8 @@ SYSTEM_PROMPTS = {
         
         Respond ONLY with a valid JSON object (no markdown, no extra text):
         {"strike_idx": 4, "maturity_idx": 1, "direction": "sell", "quantity": 2.0, "reasoning": "Your detailed analysis here. Reference specific numbers from the observation."}
-        """
-    ).strip(),
-    
-    "earnings_vol_crush": textwrap.dedent(
-        """
+        """).strip(),
+    "earnings_vol_crush": textwrap.dedent("""
         You are a volatility trader managing a portfolio around an earnings event.
         
         The implied volatility surface is currently elevated due to an upcoming
@@ -97,11 +94,8 @@ SYSTEM_PROMPTS = {
         
         Respond ONLY with a valid JSON object (no markdown, no extra text):
         {"strike_idx": 4, "maturity_idx": 1, "direction": "sell", "quantity": 2.0, "reasoning": "Your detailed analysis here. Reference specific numbers from the observation."}
-        """
-    ).strip(),
-    
-    "gamma_scalping": textwrap.dedent(
-        """
+        """).strip(),
+    "gamma_scalping": textwrap.dedent("""
         You are a derivatives trader managing a long ATM straddle position.
         
         Your position has significant gamma exposure. The spot price is oscillating
@@ -118,14 +112,13 @@ SYSTEM_PROMPTS = {
         
         Respond ONLY with a valid JSON object (no markdown, no extra text):
         {"strike_idx": 4, "maturity_idx": 0, "direction": "sell", "quantity": 1.5, "reasoning": "Your detailed analysis here. Reference specific numbers from the observation."}
-        """
-    ).strip(),
+        """).strip(),
 }
 
 
 def log_start(task: str, env: str, model: str) -> None:
     """Print [START] line to stdout.
-    
+
     Requirements: 12.3
     """
     print(f"[START] task={task} env={env} model={model}", flush=True)
@@ -135,7 +128,7 @@ def log_step(
     step: int, action: str, reward: float, done: bool, error: Optional[str]
 ) -> None:
     """Print [STEP] line to stdout.
-    
+
     Requirements: 12.4
     """
     error_val = error if error else "null"
@@ -148,7 +141,7 @@ def log_step(
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     """Print [END] line to stdout.
-    
+
     Requirements: 12.5
     """
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
@@ -160,56 +153,56 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
 
 def _repair_truncated_json(text: str) -> Optional[str]:
     """Attempt to repair JSON truncated by max_tokens.
-    
+
     Handles:
     - Truncated flat objects: {"strike_idx":4,...,"reasoning":"some long tex
     - Truncated arrays: [{"strike_idx":2,...,"quantity":
     - Truncated nested: {"option1":{"strike_idx":2,...
     """
     # Find the first { which starts an action-like object
-    start = text.find('{')
+    start = text.find("{")
     if start < 0:
         return None
-    
+
     fragment = text[start:]
-    
+
     # If it already ends with }, try as-is
-    if fragment.rstrip().endswith('}'):
+    if fragment.rstrip().endswith("}"):
         return fragment
-    
+
     # Count unmatched braces and check if we're inside a string
     in_string = False
     escape_next = False
     depth = 0
-    
+
     for ch in fragment:
         if escape_next:
             escape_next = False
             continue
-        if ch == '\\':
+        if ch == "\\":
             escape_next = True
             continue
         if ch == '"':
             in_string = not in_string
             continue
         if not in_string:
-            if ch == '{':
+            if ch == "{":
                 depth += 1
-            elif ch == '}':
+            elif ch == "}":
                 depth -= 1
-    
+
     # Repair: close open string, then close open braces
     repair = fragment
     if in_string:
         repair += '"'
-    repair += '}' * depth
-    
+    repair += "}" * depth
+
     return repair
 
 
 def parse_llm_response(response_text: str) -> Dict[str, Any]:
     """Parse LLM response to extract action parameters.
-    
+
     Tries multiple strategies:
     1. Direct JSON parse
     2. Extract from markdown code blocks
@@ -224,12 +217,12 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
         "quantity": 0.0,
         "reasoning": "",
     }
-    
+
     if not response_text:
         return default
-    
+
     text = response_text.strip()
-    
+
     # Strategy 1: Direct JSON parse
     try:
         parsed = json.loads(text)
@@ -253,7 +246,7 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
                     return {**default, **item}
     except json.JSONDecodeError:
         pass
-    
+
     # Strategy 2: Extract from markdown code blocks
     code_block_pattern = r"```(?:json)?\s*([\s\S]*?)```"
     matches = re.findall(code_block_pattern, text)
@@ -264,7 +257,7 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
                 return {**default, **parsed}
         except json.JSONDecodeError:
             continue
-    
+
     # Strategy 3: Find complete JSON object in text
     json_pattern = r"\{[\s\S]*?\}"
     matches = re.findall(json_pattern, text)
@@ -275,7 +268,7 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
                 return {**default, **parsed}
         except json.JSONDecodeError:
             continue
-    
+
     # Strategy 4: Repair truncated JSON (max_tokens cut mid-sentence)
     repaired = _repair_truncated_json(text)
     if repaired:
@@ -285,33 +278,33 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
                 return {**default, **parsed}
         except json.JSONDecodeError:
             pass
-    
+
     return default
 
 
 def build_prompt(observation: VSRObservation, step: int) -> str:
     """Build user prompt from observation.
-    
+
     Formats IV surface as table, includes spot price, portfolio Greeks,
     P&L, positions, market sentiment, and last error if present.
-    
+
     Requirements: 12.7
     """
     # Format IV surface as table
     strikes = [85, 90, 95, 97.5, 100, 102.5, 105, 110]
     maturities = [30, 90, 180]
-    
+
     iv_table = "IV Surface (strikes × maturities):\n"
     iv_table += "Strike\\Maturity | " + " | ".join(f"{m}d" for m in maturities) + "\n"
     iv_table += "-" * 50 + "\n"
-    
+
     for i, strike in enumerate(strikes):
         row = f"{strike:>13} |"
         for j in range(3):
             iv_val = observation.iv_surface[i][j]
             row += f" {iv_val:.4f} |"
         iv_table += row + "\n"
-    
+
     # Format portfolio Greeks
     greeks = observation.portfolio_greeks
     greeks_str = (
@@ -320,7 +313,7 @@ def build_prompt(observation: VSRObservation, step: int) -> str:
         f"Vega: {greeks.get('vega', 0.0):.4f}, "
         f"Theta: {greeks.get('theta', 0.0):.4f}"
     )
-    
+
     # Format positions
     positions_str = "None"
     if observation.portfolio_positions:
@@ -328,10 +321,9 @@ def build_prompt(observation: VSRObservation, step: int) -> str:
             f"  - {pos.get('direction', '?')} {pos.get('quantity', 0)} @ K={pos.get('strike', 0)}, T={pos.get('maturity', 0)}"
             for pos in observation.portfolio_positions
         )
-    
+
     # Build prompt
-    prompt = textwrap.dedent(
-        f"""
+    prompt = textwrap.dedent(f"""
         Step: {step} / {step + observation.steps_remaining}
         Task: {observation.task_name}
         
@@ -346,15 +338,14 @@ def build_prompt(observation: VSRObservation, step: int) -> str:
         {positions_str}
         
         Market Sentiment: {observation.market_sentiment:.2f}
-        """
-    ).strip()
-    
+        """).strip()
+
     # Add last error if present
     if observation.last_action_error:
         prompt += f"\n\nLast Action Error: {observation.last_action_error}"
-    
+
     prompt += "\n\nProvide your action as a JSON object."
-    
+
     return prompt
 
 
@@ -362,7 +353,7 @@ def get_model_response(
     client: OpenAI, observation: VSRObservation, step: int, task_name: str
 ) -> Dict[str, Any]:
     """Get action from LLM model.
-    
+
     Builds prompt, calls LLM, parses response.
     Retries up to 2 times on empty response (Groq rate-limit).
     Adds 2s delay between calls to stay under rate limits.
@@ -392,13 +383,19 @@ def get_model_response(
             response_text = (completion.choices[0].message.content or "").strip()
 
             if not response_text and attempt < max_retries - 1:
-                print(f"  [LLM] Empty response, retrying ({attempt+1}/{max_retries})...", file=sys.stderr)
+                print(
+                    f"  [LLM] Empty response, retrying ({attempt+1}/{max_retries})...",
+                    file=sys.stderr,
+                )
                 time.sleep(3)  # Extra wait before retry
                 continue
 
             print(f"  [LLM] Raw: {response_text[:200]}", file=sys.stderr)
             parsed = parse_llm_response(response_text)
-            print(f"  [LLM] Parsed dir={parsed.get('direction')}, strike={parsed.get('strike_idx')}, qty={parsed.get('quantity')}", file=sys.stderr)
+            print(
+                f"  [LLM] Parsed dir={parsed.get('direction')}, strike={parsed.get('strike_idx')}, qty={parsed.get('quantity')}",
+                file=sys.stderr,
+            )
             return parsed
 
         except Exception as exc:
@@ -413,12 +410,12 @@ def get_model_response(
 
 def create_action(parsed: Dict[str, Any]) -> VSRAction:
     """Create VSRAction from parsed LLM response.
-    
+
     Maps direction string to TradeDirection enum and ensures types are correct.
     """
     # Map direction string to enum
     direction_str = str(parsed.get("direction") or "hold").lower()
-    
+
     # Handle various direction formats
     if direction_str in ("buy", "overpriced", "underpriced"):
         # Note: iv_reading prompt uses overpriced/underpriced, but we map buy/sell specifically now.
@@ -432,14 +429,14 @@ def create_action(parsed: Dict[str, Any]) -> VSRAction:
         direction = TradeDirection.SELL
     else:
         direction = TradeDirection.HOLD
-    
+
     # Clamp strike/maturity indices to valid ranges (prevent Pydantic crash)
     strike_idx = parsed.get("strike_idx")
     strike_idx = max(0, min(7, int(strike_idx))) if strike_idx is not None else 0
-    
+
     maturity_idx = parsed.get("maturity_idx")
     maturity_idx = max(0, min(2, int(maturity_idx))) if maturity_idx is not None else 0
-    
+
     # Clamp quantity to [0, 10] — models sometimes output larger values
     quantity = parsed.get("quantity")
     quantity = max(0.0, min(10.0, float(quantity))) if quantity is not None else 0.0
@@ -454,96 +451,102 @@ def create_action(parsed: Dict[str, Any]) -> VSRAction:
 
 
 async def run_task(
-    client: OpenAI, env: "VSREnvironment", task_name: str, seed: int
+    client: OpenAI, env: VSREnvironment, task_name: str, seed: int
 ) -> float:
     """Run a single task episode.
-    
+
     Resets environment with fixed seed, loops for max_steps,
     builds prompt, calls LLM, parses response, executes step,
     logs each step, extracts grader score on completion.
-    
+
     Requirements: 12.2, 12.3, 12.4, 12.5
     """
     max_steps = MAX_STEPS_PER_TASK[task_name]
-    
+
     rewards: List[float] = []
     steps_taken = 0
     score = 0.0
-    
+
     log_start(task=task_name, env=BENCHMARK, model=MODEL_NAME)
-    
+
     try:
         # Reset environment with fixed seed
         observation = env.reset(task_name=task_name, seed=seed)
-        
+
         for step in range(1, max_steps + 1):
             # Get action from LLM
             parsed = get_model_response(client, observation, step, task_name)
             action = create_action(parsed)
-            
+
             # Execute step
             result = env.step(action)
             observation = result["observation"]
             reward_val = float(result["reward"])
             done = result["done"]
-            error = observation.last_action_error if hasattr(observation, 'last_action_error') else None
-            
+            error = (
+                observation.last_action_error
+                if hasattr(observation, "last_action_error")
+                else None
+            )
+
             rewards.append(reward_val)
             steps_taken = step
-            
+
             # Format action string for logging
             action_str = f"{action.direction.value}({action.selected_strike},{action.selected_maturity},{action.quantity:.1f})"
-            
+
             # Log step
-            log_step(step=step, action=action_str, reward=reward_val, done=done, error=error)
-            
+            log_step(
+                step=step, action=action_str, reward=reward_val, done=done, error=error
+            )
+
             if done:
                 break
-        
+
         # Extract grader score from info
         info = result.get("info", {})
         score = info.get("grader_score", sum(rewards) / max(len(rewards), 1))
         score = min(max(score, 0.0), 1.0)  # clamp to [0, 1]
-        
+
     except Exception as e:
         # Catastrophic error: score is 0
         print(f"[DEBUG] Task error: {e}", flush=True)
         score = 0.0
-    
+
     finally:
         # Always log end
         success = score >= SUCCESS_SCORE_THRESHOLD
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
-    
+
     return score
 
 
 async def main() -> None:
     """Main entry point.
-    
+
     Initializes environment, runs all three tasks sequentially,
     prints final summary.
-    
+
     Requirements: 12.2
     """
     # Initialize OpenAI client (Requirement: 12.1)
     client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-    
+
     # Import environment here to avoid circular imports
     from vsr_env.server.vsr_environment import VSREnvironment
-    
+
     # Initialize environment
     env = VSREnvironment()
-    
+
     # Run all three tasks sequentially
     scores = {}
-    
+
     for task_name in TASKS:
         seed = TASK_SEEDS[task_name]
         score = await run_task(client, env, task_name, seed)
         scores[task_name] = score
         print()  # Blank line between tasks
-    
+
     # Print final summary
     print("=" * 60)
     print("FINAL SUMMARY")

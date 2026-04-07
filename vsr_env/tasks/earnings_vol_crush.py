@@ -10,7 +10,6 @@ from typing import Any, List, Tuple
 
 import numpy as np
 
-from vsr_env.engine.option_chain import OptionChainEngine
 from vsr_env.models import VSRState
 
 
@@ -51,21 +50,21 @@ class EarningsVolCrushTask:
         elevation_factor = rng.uniform(1.3, 1.5)
         state.variance *= elevation_factor
         state.variance = np.clip(state.variance, 0.01, 0.16)
-        
+
         # Set vol crush step (3-6)
         # Requirements: 5.2
         state.vol_crush_step = int(rng.randint(3, 7))
-        
+
         # Initialize empty portfolio
         state.positions = []
         state.portfolio_delta = 0.0
         state.portfolio_gamma = 0.0
         state.portfolio_vega = 0.0
         state.portfolio_pnl = 0.0
-        
+
         # Track pre-crush vega for grading
         state.pre_crush_vega = 0.0
-        
+
         # No mispricings for this task
         return []
 
@@ -89,29 +88,29 @@ class EarningsVolCrushTask:
 
 class EarningsVolCrushGrader:
     """Grader for Earnings Vol Crush task.
-    
+
     Scores based on pre-crush positioning, post-crush re-hedging, and P&L outcome.
-    
+
     Requirements: 5.4, 5.5, 5.6
     """
-    
+
     def score(self, episode_history: List[Any], state: VSRState) -> float:
         """Compute final score for Earnings Vol Crush task.
-        
+
         Score = pre_crush_positioning × 0.40 + post_crush_rehedge × 0.35 + pnl_outcome × 0.25
-        
+
         Args:
             episode_history: List of step records with 'action'
             state: Final VSRState with portfolio_vega, vol_crush_step, and portfolio_pnl
-        
+
         Returns:
             Score in [0.0, 1.0]
-        
+
         Requirements: 5.4, 5.5, 5.6
         """
         # Get vol crush step
-        vol_crush_step = getattr(state, 'vol_crush_step', 4)
-        
+        vol_crush_step = getattr(state, "vol_crush_step", 4)
+
         # Compute pre-crush positioning (was vega negative before crush?)
         # Requirements: 5.4
         pre_crush_vega = 0.0
@@ -120,17 +119,19 @@ class EarningsVolCrushGrader:
             if i + 1 == vol_crush_step - 1:  # Step immediately before crush
                 obs = step.get("observation")
                 if obs is not None:
-                    greeks = obs.portfolio_greeks if hasattr(obs, 'portfolio_greeks') else {}
+                    greeks = (
+                        obs.portfolio_greeks if hasattr(obs, "portfolio_greeks") else {}
+                    )
                     pre_crush_vega = greeks.get("vega", 0.0)
                 break
-        
+
         # Pre-crush positioning score: gradient based on how short vega is.
         # Actively short vega (< -0.01) gets credit; zero/positive does not.
         if pre_crush_vega < -0.01:
             pre_crush_positioning = min(1.0, abs(pre_crush_vega) / 0.1)
         else:
             pre_crush_positioning = 0.0
-        
+
         # Compute post-crush re-hedging (delta neutrality after crush)
         # Requirements: 5.5
         post_crush_deltas = []
@@ -138,28 +139,35 @@ class EarningsVolCrushGrader:
             if i + 1 > vol_crush_step:  # Steps after crush
                 obs = step.get("observation")
                 if obs is not None:
-                    greeks = obs.portfolio_greeks if hasattr(obs, 'portfolio_greeks') else {}
+                    greeks = (
+                        obs.portfolio_greeks if hasattr(obs, "portfolio_greeks") else {}
+                    )
                     post_crush_deltas.append(abs(greeks.get("delta", 0.0)))
-        
+
         # Post-crush re-hedge score: average delta neutrality after crush
         if post_crush_deltas:
             avg_post_crush_delta = sum(post_crush_deltas) / len(post_crush_deltas)
             post_crush_rehedge = max(0.0, 1.0 - avg_post_crush_delta / 0.5)
         else:
             post_crush_rehedge = 0.0
-        
+
         # P&L outcome (sigmoid-normalized)
         # Requirements: 5.6
         final_pnl = state.portfolio_pnl
         pnl_outcome = self._sigmoid(final_pnl, scale=0.3)
-        
+
         # Final score: weighted combination
-        score = pre_crush_positioning * 0.40 + post_crush_rehedge * 0.35 + pnl_outcome * 0.25
-        
+        score = (
+            pre_crush_positioning * 0.40
+            + post_crush_rehedge * 0.35
+            + pnl_outcome * 0.25
+        )
+
         # Clamp to [0.0, 1.0]
         return min(max(score, 0.0), 1.0)
-    
+
     def _sigmoid(self, x: float, scale: float = 0.3) -> float:
         """Sigmoid function centered at 0."""
         import math
+
         return 1.0 / (1.0 + math.exp(-x / scale))
