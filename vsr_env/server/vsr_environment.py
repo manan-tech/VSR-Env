@@ -307,6 +307,19 @@ class VSREnvironment:
         sentiment = (self._state.variance - 0.04) / 0.04  # normalized around baseline
         sentiment = max(-1.0, min(1.0, sentiment))
 
+        # Compute earnings proximity if applicable
+        proximity = 1.0
+        if self._state.task_name == "earnings_vol_crush" and hasattr(
+            self._state, "vol_crush_step"
+        ):
+            if self._state.step_count >= self._state.vol_crush_step:
+                proximity = 0.0
+            else:
+                proximity = max(
+                    0.0, 1.0 - (self._state.step_count / self._state.vol_crush_step)
+                )
+        self._state.earnings_proximity = proximity
+
         return VSRObservation(
             iv_surface=self._iv_surface,
             spot_price=round(self._state.spot_price, 4),
@@ -317,6 +330,7 @@ class VSREnvironment:
                 for pos in self._state.positions
             ],
             market_sentiment=round(sentiment, 4),
+            earnings_proximity=round(proximity, 4),
             step_number=self._state.step_count,
             steps_remaining=config["max_steps"] - self._state.step_count,
             task_name=self._state.task_name,
