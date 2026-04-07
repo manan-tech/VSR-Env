@@ -50,7 +50,7 @@ class VolRegimeDetectionGrader:
     def __init__(self):
         self.exact_match = ExactMatchRubric()
 
-    def score(self, episode_history: Dict[str, Any], state: VSRState) -> float:
+    def score(self, episode_history: List[Dict[str, Any]], state: VSRState) -> float:
         """Compute the final grade for the episode.
 
         Args:
@@ -60,17 +60,24 @@ class VolRegimeDetectionGrader:
         Returns:
             Float between 0.0 and 1.0 indicating detection accuracy
         """
-        steps = episode_history.get("steps", [])
+        steps = episode_history
         if not steps:
             return 0.0
 
         # Extract the reasoning from the first action (since it's a 1-step task usually)
-        first_action = steps[0].get("action", {})
-        reasoning = first_action.get("reasoning", "")
+        first_action = steps[0].get("action")
+        if first_action is None:
+            return 0.0
+            
+        reasoning = getattr(first_action, "reasoning", "")
+        if not reasoning and isinstance(first_action, dict):
+            reasoning = first_action.get("reasoning", "")
 
         expected = state.expected_outcome or state.regime
 
         # Check if the correct regime string is present in the reasoning payload
-        score = self.exact_match.evaluate(reasoning, target=expected)
+        if expected and isinstance(reasoning, str):
+            if expected.lower() in reasoning.lower():
+                return 1.0
 
-        return float(score)
+        return 0.0

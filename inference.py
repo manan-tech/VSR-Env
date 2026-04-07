@@ -520,6 +520,8 @@ async def run_task(
 
     except Exception as e:
         # Catastrophic error: score is 0
+        import traceback
+        traceback.print_exc()
         print(f"[DEBUG] Task error: {e}", flush=True)
         score = 0.0
 
