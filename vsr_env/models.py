@@ -226,6 +226,10 @@ class VSRState(BaseModel):
         5,
         description="Step at which regime shift occurs (for delta_hedging task)",
     )
+    dual_shock_step: int = Field(
+        5,
+        description="Step at which the dual shock occurs (for vega_gamma_stress task)",
+    )
     vol_crush_step: int = Field(
         5,
         description="Step at which vol crush occurs (for earnings_vol_crush task)",

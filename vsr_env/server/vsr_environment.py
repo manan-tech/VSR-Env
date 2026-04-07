@@ -21,6 +21,7 @@ from vsr_env.engine.option_chain import OptionChainEngine
 from vsr_env.engine.market_sim import (
     advance_market,
     trigger_regime_shift,
+    trigger_dual_shock,
     trigger_vol_crush,
     inject_oscillation,
 )
@@ -40,9 +41,18 @@ from vsr_env.tasks.vol_regime_detection import (
     VolRegimeDetectionTask,
     VolRegimeDetectionGrader,
 )
+from vsr_env.tasks.vega_gamma_stress import (
+    VegaGammaStressTask,
+    VegaGammaStressGrader,
+)
 
 # Task configurations
 TASK_CONFIG = {
+    "vega_gamma_stress": {
+        "max_steps": 10,
+        "task_class": VegaGammaStressTask,
+        "grader_class": VegaGammaStressGrader,
+    },
     "vol_regime_detection": {
         "max_steps": 1,
         "task_class": VolRegimeDetectionTask,
@@ -232,6 +242,14 @@ class VSREnvironment:
                 and self._state.step_count == self._state.vol_crush_step
             ):
                 trigger_vol_crush(self._state, self._rng)
+
+            # Vega-gamma stress: trigger dual shock at step 4-8
+            if (
+                self._state.task_name == "vega_gamma_stress"
+                and hasattr(self._state, "dual_shock_step")
+                and self._state.step_count == self._state.dual_shock_step
+            ):
+                trigger_dual_shock(self._state, self._rng)
 
             # Gamma scalping: inject oscillation every step
             if self._state.task_name == "gamma_scalping":

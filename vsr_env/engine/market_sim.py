@@ -81,6 +81,28 @@ def trigger_regime_shift(state: VSRState, rng: np.random.RandomState) -> None:
     state.variance = np.clip(state.variance, 0.01, 0.16)
 
 
+def trigger_dual_shock(state: VSRState, rng: np.random.RandomState) -> None:
+    """Trigger a dual market shock for the vega-gamma stress task.
+
+    Drops the spot price heavily (-15% to -20%) and simultaneously
+    spikes variance massively (* 3.0 to * 5.0).
+
+    Args:
+        state: Current VSRState (modified in place)
+        rng: Seeded numpy RandomState for reproducibility
+    """
+    drop_factor = rng.uniform(0.80, 0.85)
+    spike_factor = rng.uniform(3.0, 5.0)
+
+    state.spot_price *= drop_factor
+    state.variance *= spike_factor
+
+    # Cap limits beyond normal
+    state.spot_price = np.clip(state.spot_price, 30.0, 150.0)
+    state.variance = np.clip(state.variance, 0.01, 0.40)
+    state.regime = "crash"
+
+
 def trigger_vol_crush(state: VSRState, rng: np.random.RandomState) -> None:
     """Trigger a volatility crush event for earnings scenarios.
 
