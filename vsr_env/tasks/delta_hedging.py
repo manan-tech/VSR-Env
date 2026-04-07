@@ -116,9 +116,9 @@ class DeltaHedgingTask:
         # Store initial delta for grading (absolute value)
         state.initial_delta = abs(portfolio_delta)
 
-        # Set regime shift step (2 or 3) for market shock
+        # Set regime shift step (2, 3, or 4) for market shock
         # Requirements: 4.2
-        state.regime_shift_step = int(rng.randint(2, 4))
+        state.regime_shift_step = int(rng.randint(2, 5))
 
         # No mispricings for delta hedging task
         return []

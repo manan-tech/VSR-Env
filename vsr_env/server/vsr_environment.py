@@ -217,7 +217,7 @@ class VSREnvironment:
         if self._rng is not None:
             # Check for task-specific market events
 
-            # Delta hedging: trigger regime shift at step 2 or 3
+            # Delta hedging: trigger regime shift between step 2 and 4
             if (
                 self._state.task_name == "delta_hedging"
                 and hasattr(self._state, "regime_shift_step")
