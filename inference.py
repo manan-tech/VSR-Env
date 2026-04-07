@@ -33,7 +33,7 @@ from vsr_env.server.vsr_environment import VSREnvironment
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
 HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or os.getenv("GROQ_API_KEY")
 # Model name for Groq (common models: llama-3.3-70b-versatile, mixtral-8x7b-32768)
-MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+MODEL_NAME = "llama-3.3-70b-versatile"
 BENCHMARK = "vsr_env"
 
 # Task configurations (Requirements: 12.2, 12.6)
