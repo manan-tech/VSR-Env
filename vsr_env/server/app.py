@@ -13,13 +13,14 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 import json
+import yaml
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
 
-from vsr_env.models import VSRAction, VSRObservation, VSRState
+from vsr_env.models import VSRAction
 from vsr_env.server.vsr_environment import VSREnvironment
+from vsr_env.server.telemetry import tracker
 
 # Configure logging
 logging.basicConfig(
@@ -39,7 +40,27 @@ app = FastAPI(
 env = VSREnvironment()
 
 
+# Validate openenv.yaml manifest on startup
+def validate_manifest():
+    manifest_path = os.path.join(os.path.dirname(__file__), "..", "..", "openenv.yaml")
+    if not os.path.exists(manifest_path):
+        raise RuntimeError(f"Missing openenv.yaml manifest at {manifest_path}")
+    try:
+        with open(manifest_path, "r") as f:
+            manifest = yaml.safe_load(f)
+            if "name" not in manifest or "tasks" not in manifest:
+                raise ValueError("Manifest missing required 'name' or 'tasks' fields")
+            logger.info(
+                f"Loaded openenv.yaml manifest successfully with {len(manifest['tasks'])} tasks."
+            )
+    except Exception as e:
+        raise RuntimeError(f"Invalid openenv.yaml manifest: {e}")
+
+
+validate_manifest()
+
 # === Request/Response models ===
+
 
 class ResetRequest(BaseModel):
     task_name: str = "delta_hedging"
@@ -54,6 +75,7 @@ class StepResponse(BaseModel):
 
 
 # === Endpoints ===
+
 
 @app.get("/", response_class=RedirectResponse)
 async def root():
@@ -97,6 +119,11 @@ async def reset(request: Optional[ResetRequest] = None):
         logger.info(f"Resetting environment: task={task_name}, seed={seed}")
         observation = env.reset(task_name=task_name, seed=seed)
 
+        # Start tracking the episode
+        tracker.start_episode(
+            episode_id=env.state.episode_id, task_name=task_name, seed=seed
+        )
+
         return {"observation": observation.model_dump()}
     except Exception as e:
         logger.error(f"Reset failed: {e}", exc_info=True)
@@ -120,6 +147,23 @@ async def step(action: VSRAction):
         )
         result = env.step(action)
 
+        # Record step in telemetry
+        if env.state.episode_id:
+            tracker.record_step(
+                episode_id=env.state.episode_id,
+                step_data={
+                    "action": action.model_dump(),
+                    "observation": result["observation"].model_dump(),
+                    "reward": result["reward"],
+                    "done": result["done"],
+                },
+            )
+            if result["done"]:
+                tracker.complete_episode(
+                    episode_id=env.state.episode_id,
+                    final_score=result["info"].get("grader_score", 0.0),
+                )
+
         return {
             "observation": result["observation"].model_dump(),
             "reward": result["reward"],
@@ -140,6 +184,17 @@ async def get_state():
         logger.error(f"State retrieval failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/telemetry")
+async def get_telemetry():
+    """Get the full telemetry trace of all episodes."""
+    try:
+        return {"telemetry": tracker.get_all_episodes()}
+    except Exception as e:
+        logger.error(f"Telemetry retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for continuous environment interaction."""
@@ -151,33 +206,33 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             try:
                 msg = json.loads(data)
-                
+
                 if msg.get("action") == "reset":
                     task_name = msg.get("task_name", "delta_hedging")
                     seed = msg.get("seed", 42)
                     obs = ws_env.reset(task_name=task_name, seed=seed)
-                    await websocket.send_json({
-                        "type": "reset",
-                        "observation": obs.model_dump()
-                    })
-                
+                    await websocket.send_json(
+                        {"type": "reset", "observation": obs.model_dump()}
+                    )
+
                 elif msg.get("action") == "step":
                     vsr_action = VSRAction(**msg.get("payload", {}))
                     result = ws_env.step(vsr_action)
-                    await websocket.send_json({
-                        "type": "step",
-                        "observation": result["observation"].model_dump(),
-                        "reward": result["reward"],
-                        "done": result["done"],
-                        "info": result["info"]
-                    })
-                
+                    await websocket.send_json(
+                        {
+                            "type": "step",
+                            "observation": result["observation"].model_dump(),
+                            "reward": result["reward"],
+                            "done": result["done"],
+                            "info": result["info"],
+                        }
+                    )
+
                 elif msg.get("action") == "state":
-                    await websocket.send_json({
-                        "type": "state",
-                        "state": ws_env.state.model_dump()
-                    })
-                    
+                    await websocket.send_json(
+                        {"type": "state", "state": ws_env.state.model_dump()}
+                    )
+
             except Exception as e:
                 logger.error(f"WS error processing message: {e}")
                 await websocket.send_json({"type": "error", "message": str(e)})
