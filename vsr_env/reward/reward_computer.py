@@ -406,3 +406,107 @@ class RewardComputer:
             pnl_component=pnl_reward,
             reasoning_component=reasoning_reward,
         )
+
+    def compute_vol_regime_reward(
+        self,
+        action: "VSRAction",
+        state: "VSRState",
+        observation: "VSRObservation"
+    ) -> "VSRReward":
+        """Compute reward for vol regime detection task.
+
+        Reward = identification_component + reasoning_component
+
+        identification_component:
+          - 0.8 if correct regime identified in reasoning
+          - 0.0 otherwise
+
+        reasoning_component:
+          - Up to 0.2 for quality of reasoning
+
+        Args:
+            action: Agent's action with reasoning containing regime prediction
+            state: Current state with expected_regime
+            observation: Current observation
+
+        Returns:
+            VSRReward with total and component breakdown
+        """
+        from vsr_env.models import VSRReward
+
+        expected = getattr(state, "expected_outcome", "normal")
+
+        # Extract regime from reasoning
+        text = action.reasoning.lower()
+        predicted = "normal"  # Default
+
+        if "low" in text and any(w in text for w in ["vol", "iv", "implied", "regime", "variance"]):
+            predicted = "low"
+        elif "high" in text and any(w in text for w in ["vol", "iv", "implied", "regime", "variance"]):
+            predicted = "high"
+        elif "normal" in text and any(w in text for w in ["vol", "iv", "implied", "regime", "variance"]):
+            predicted = "normal"
+
+        # Identification component (0.8 for correct)
+        identification = 0.8 if predicted == expected else 0.0
+
+        # Reasoning component (up to 0.2)
+        reasoning_score = score_reasoning_quality(action.reasoning, observation, state)
+        reasoning_component = reasoning_score * 0.2
+
+        total = min(identification + reasoning_component, 1.0)
+
+        return VSRReward(
+            total=total,
+            identification_component=identification,
+            reasoning_component=reasoning_component
+        )
+
+    def compute_vega_gamma_stress_reward(
+        self,
+        action: "VSRAction",
+        state: "VSRState",
+        observation: "VSRObservation",
+        prev_pnl: float,
+    ) -> "VSRReward":
+        """Compute reward for vega-gamma stress task.
+
+        Reward = vega_gamma_neutrality + pnl_survival + reasoning_component
+
+        Args:
+            action: Agent's action
+            state: Current state with portfolio vega, gamma, and P&L
+            observation: Current observation
+            prev_pnl: Portfolio P&L before the action
+
+        Returns:
+            VSRReward with total and component breakdown
+        """
+        from vsr_env.models import VSRReward
+
+        # Vega/Gamma neutrality (0.0 - 0.5)
+        # Use Gaussian scoring: exp(-0.5 * (value / threshold)^2)
+        vega_abs = abs(state.portfolio_vega) if hasattr(state, "portfolio_vega") else 0.0
+        gamma_abs = abs(state.portfolio_gamma) if hasattr(state, "portfolio_gamma") else 0.0
+
+        vega_score = math.exp(-0.5 * (vega_abs / 0.05) ** 2)
+        gamma_score = math.exp(-0.5 * (gamma_abs / 0.02) ** 2)
+        vg_neutrality = (vega_score * 0.5 + gamma_score * 0.5) * 0.5
+
+        # P&L survival (0.0 - 0.3)
+        pnl_change = state.portfolio_pnl - prev_pnl
+        pnl_reward = sigmoid(pnl_change, scale=0.5) * 0.3
+
+        # Reasoning coherence (0.0 - 0.2)
+        reasoning_score = score_reasoning_quality(action.reasoning, observation, state)
+        reasoning_reward = reasoning_score * 0.2
+
+        # Total is clamped to [0.0, 1.0]
+        total = min(vg_neutrality + pnl_reward + reasoning_reward, 1.0)
+
+        return VSRReward(
+            total=total,
+            greek_component=vg_neutrality,
+            pnl_component=pnl_reward,
+            reasoning_component=reasoning_reward,
+        )

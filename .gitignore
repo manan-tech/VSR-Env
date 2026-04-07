@@ -79,3 +79,13 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+# Unnecessary and Vibe-coded Config Files
+.code-review-graph/
+.gemini/
+config.yaml
+*_plan.md
+task_restructure_analysis.md
+test_integration.py
+# Let uv lock be tracked if desired, but we can ignore it
+# uv.lock
+

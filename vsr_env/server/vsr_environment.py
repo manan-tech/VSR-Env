@@ -292,7 +292,9 @@ class VSREnvironment:
         )
 
         # Compute grader score on episode end
-        info: Dict[str, Any] = {}
+        info: Dict[str, Any] = {
+            "reward_components": reward.model_dump()
+        }
         if done and self._current_grader is not None:
             grader_score = self._current_grader.score(
                 self._episode_history, self._state
@@ -390,6 +392,14 @@ class VSREnvironment:
         elif task == "gamma_scalping":
             return self.reward_computer.compute_gamma_scalping_reward(
                 action, self._state, obs, prev_delta, prev_pnl
+            )
+        elif task == "vega_gamma_stress":
+            return self.reward_computer.compute_vega_gamma_stress_reward(
+                action, self._state, obs, prev_pnl
+            )
+        elif task == "vol_regime_detection":
+            return self.reward_computer.compute_vol_regime_reward(
+                action, self._state, obs
             )
         else:
             return VSRReward(total=0.0)

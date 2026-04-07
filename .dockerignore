@@ -17,3 +17,15 @@ build/
 tests/
 .kiro/
 .vscode/
+
+# Unnecessary and Config Files
+.code-review-graph/
+.gemini/
+config.yaml
+*.md
+!README.md
+!ARCHITECTURE.md
+!TASKS.md
+!REWARDS.md
+test_integration.py
+uv.lock

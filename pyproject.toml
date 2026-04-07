@@ -40,3 +40,6 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["vsr_env*"]
+
+[project.scripts]
+server = "vsr_env.server.app:main"

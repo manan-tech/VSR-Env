@@ -33,7 +33,7 @@ from vsr_env.server.vsr_environment import VSREnvironment
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
 HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or os.getenv("GROQ_API_KEY")
 # Model name for Groq (common models: llama-3.3-70b-versatile, mixtral-8x7b-32768)
-MODEL_NAME = "llama-3.3-70b-versatile"
+MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
 BENCHMARK = "vsr_env"
 
 # Task configurations (Requirements: 12.2, 12.6)
@@ -45,11 +45,11 @@ TASKS = [
     "vega_gamma_stress",
 ]
 MAX_STEPS_PER_TASK = {
-    "vol_regime_detection": 1,
-    "delta_hedging": 5,
-    "earnings_vol_crush": 8,
-    "gamma_scalping": 10,
-    "vega_gamma_stress": 10,
+    "vol_regime_detection": 3,
+    "delta_hedging": 7,
+    "earnings_vol_crush": 10,
+    "gamma_scalping": 15,
+    "vega_gamma_stress": 25,
 }
 TASK_SEEDS = {
     "vol_regime_detection": 101,
@@ -390,6 +390,84 @@ def build_prompt(observation: VSRObservation, step: int) -> str:
     return prompt
 
 
+def get_model_response_with_trajectory(
+    client: OpenAI,
+    observation: VSRObservation,
+    step: int,
+    task_name: str,
+    trajectory_history: List[str],
+) -> Dict[str, Any]:
+    """Get action from LLM with full trajectory context.
+
+    Same as get_model_response but injects trajectory history into user prompt.
+
+    Args:
+        client: OpenAI client
+        observation: Current observation
+        step: Current step number
+        task_name: Task identifier
+        trajectory_history: List of structured diagnostic blocks from previous steps
+
+    Returns:
+        Parsed action dictionary
+    """
+    import time
+    import sys
+
+    system_prompt = SYSTEM_PROMPTS.get(task_name, SYSTEM_PROMPTS["delta_hedging"])
+
+    # Build base prompt
+    user_prompt = build_prompt(observation, step)
+
+    # V2: Inject trajectory context into user prompt
+    trajectory_context = build_trajectory_context(trajectory_history)
+    if trajectory_context:
+        user_prompt = user_prompt + trajectory_context
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        # Rate-limit delay (Groq free tier: ~30 req/min)
+        time.sleep(2)
+
+        try:
+            completion = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
+                stream=False,
+            )
+            response_text = (completion.choices[0].message.content or "").strip()
+
+            if not response_text and attempt < max_retries - 1:
+                print(
+                    f"  [LLM] Empty response, retrying ({attempt+1}/{max_retries})...",
+                    file=sys.stderr,
+                )
+                time.sleep(3)  # Extra wait before retry
+                continue
+
+            print(f"  [LLM] Raw: {response_text[:200]}", file=sys.stderr)
+            parsed = parse_llm_response(response_text)
+            print(
+                f"  [LLM] Parsed dir={parsed.get('direction')}, strike={parsed.get('strike_idx')}, qty={parsed.get('quantity')}",
+                file=sys.stderr,
+            )
+            return parsed
+
+        except Exception as exc:
+            print(f"  [LLM] ERROR (attempt {attempt+1}): {exc}", file=sys.stderr)
+            if attempt < max_retries - 1:
+                time.sleep(5)
+                continue
+            return parse_llm_response("")
+
+    return parse_llm_response("")
+
+
 def get_model_response(
     client: OpenAI, observation: VSRObservation, step: int, task_name: str
 ) -> Dict[str, Any]:
@@ -491,6 +569,78 @@ def create_action(parsed: Dict[str, Any]) -> VSRAction:
     )
 
 
+def build_trajectory_context(trajectory_history: List[str]) -> str:
+    """Build full trajectory context from history of structured diagnostic blocks.
+
+    Args:
+        trajectory_history: List of diagnostic blocks from previous steps
+
+    Returns:
+        Formatted trajectory context string
+    """
+    if not trajectory_history:
+        return ""
+
+    context = "\n" + "="*60 + "\n"
+    context += "TRAJECTORY HISTORY (Your Previous Steps)\n"
+    context += "="*60 + "\n\n"
+
+    for block in trajectory_history:
+        context += block + "\n"
+
+    return context
+
+
+def format_diagnostic_block(
+    step: int,
+    action: VSRAction,
+    prev_obs: VSRObservation,
+    curr_obs: VSRObservation,
+    reward_components: Dict[str, float],
+) -> str:
+    """Format a structured diagnostic block for trajectory history.
+
+    Args:
+        step: Step number
+        action: Action taken
+        prev_obs: Observation before action
+        curr_obs: Observation after action
+        reward_components: Decomposed reward with greek/pnl/reasoning components
+
+    Returns:
+        Formatted diagnostic block string
+    """
+    block = f"Step {step} Result:\n"
+    block += f"  Action: {action.direction.value}(strike={action.selected_strike}, maturity={action.selected_maturity}, qty={action.quantity:.1f})\n"
+    block += f"  Your Logic: \"{action.reasoning}\"\n"
+
+    # Format reward with components
+    total = reward_components.get('total', 0.0)
+    greek = reward_components.get('greek_component', 0.0)
+    pnl = reward_components.get('pnl_component', 0.0)
+    reasoning = reward_components.get('reasoning_component', 0.0)
+    identification = reward_components.get('identification_component', 0.0)
+
+    block += f"  Reward: {total:.2f} (greek={greek:.2f}, pnl={pnl:.2f}"
+    if reasoning > 0:
+        block += f", reasoning={reasoning:.2f}"
+    if identification > 0:
+        block += f", identification={identification:.2f}"
+    block += ")\n"
+
+    # Format portfolio state shift
+    prev_delta = prev_obs.portfolio_greeks.get('delta', 0.0)
+    curr_delta = curr_obs.portfolio_greeks.get('delta', 0.0)
+    prev_pnl = prev_obs.portfolio_pnl
+    curr_pnl = curr_obs.portfolio_pnl
+
+    block += f"  Portfolio State Shift:\n"
+    block += f"    Delta: {prev_delta:.2f} -> {curr_delta:.2f}\n"
+    block += f"    PnL: {prev_pnl:.2f} -> {curr_pnl:.2f}\n"
+
+    return block
+
+
 async def run_task(
     client: OpenAI, env: VSREnvironment, task_name: str, seed: int
 ) -> float:
@@ -500,6 +650,8 @@ async def run_task(
     builds prompt, calls LLM, parses response, executes step,
     logs each step, extracts grader score on completion.
 
+    Enhanced with Full Trajectory Context for V2 reward system.
+
     Requirements: 12.2, 12.3, 12.4, 12.5
     """
     max_steps = MAX_STEPS_PER_TASK[task_name]
@@ -508,15 +660,23 @@ async def run_task(
     steps_taken = 0
     score = 0.0
 
+    # V2: Track trajectory history for full episode context
+    trajectory_history: List[str] = []
+
     log_start(task=task_name, env=BENCHMARK, model=MODEL_NAME)
 
     try:
         # Reset environment with fixed seed
         observation = env.reset(task_name=task_name, seed=seed)
 
+        # Track previous observation for state shift computation
+        prev_observation = observation
+
         for step in range(1, max_steps + 1):
-            # Get action from LLM
-            parsed = get_model_response(client, observation, step, task_name)
+            # V2: Get action from LLM with trajectory context
+            parsed = get_model_response_with_trajectory(
+                client, observation, step, task_name, trajectory_history
+            )
             action = create_action(parsed)
 
             # Execute step
@@ -530,6 +690,9 @@ async def run_task(
                 else None
             )
 
+            # V2: Extract reward components from info
+            reward_components = result.get("info", {}).get("reward_components", {"total": reward_val})
+
             rewards.append(reward_val)
             steps_taken = step
 
@@ -540,6 +703,20 @@ async def run_task(
             log_step(
                 step=step, action=action_str, reward=reward_val, done=done, error=error
             )
+
+            # V2: Build diagnostic block and add to trajectory history
+            if action.direction.value != "hold" or step == 1:
+                diagnostic_block = format_diagnostic_block(
+                    step=step,
+                    action=action,
+                    prev_obs=prev_observation,
+                    curr_obs=observation,
+                    reward_components=reward_components,
+                )
+                trajectory_history.append(diagnostic_block)
+
+            # Update previous observation for next iteration
+            prev_observation = observation
 
             if done:
                 break
@@ -590,12 +767,12 @@ async def main() -> None:
         scores[task_name] = score
 
         # Adaptive Curriculum: Break if the baseline score isn't met
-        if score < 0.3:
-            print()
-            print(
-                f"[{task_name.upper()} FAILED] Score {score:.2f} < 0.3. Halting curriculum early."
-            )
-            break
+        # if score < 0.3:
+        #     print()
+        #     print(
+        #         f"[{task_name.upper()} FAILED] Score {score:.2f} < 0.3. Halting curriculum early."
+        #     )
+        #     break
 
         print()  # Blank line between tasks
 
