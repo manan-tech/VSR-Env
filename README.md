@@ -12,7 +12,17 @@ For a deep dive into the environment's internals, please refer to the following 
 
 VSR-Env bridges the gap between pure quantitative finance and high-level LLM reasoning. Unlike standard trading environments that focus solely on P&L, VSR-Env requires agents to **synthesize complex, high-dimensional volatility data into coherent trade theses**. 
 
-It challenges agents to move beyond simple "buy low, sell high" logic into the realm of multi-asset Greeks management, regime-shift adaptation, and qualitative reasoning—critical skills for next-generation AI financial assistants that are rarely captured in existing benchmarks.
+## Difficulty Matrix
+
+Our environment features a strict, 5-tier adaptive curriculum designed to thoroughly benchmark an agent's quantitative reasoning capabilities:
+
+| Tier | Task | Skill Tested | Max Steps | Expected LLM Baseline |
+| :--- | :--- | :--- | :--- | :--- |
+| **Easy** | `vol_regime_detection` | Analytical mapping of Implied Volatility parameters | 1 | ~0.90 |
+| **Medium** | `delta_hedging` | Neutralizing directional Greek exposures through shocks | 5 | ~0.65 |
+| **Hard** | `earnings_vol_crush` | Predicting and trading short Vega into scheduled crush events | 8 | ~0.40 |
+| **Expert** | `gamma_scalping` | Dynamic path-dependent spot re-hedging against Theta bleed | 10 | ~0.15 |
+| **Super-Boss** | `vega_gamma_stress` | Surviving massive dual-shock scenarios using strict SD bounds | 10 | ~0.05 |
 
 ## Mathematical Foundations
 
@@ -25,11 +35,13 @@ VSR-Env is built on robust quantitative finance principles:
 
 ## Overview
 
-VSR-Env enables LLM agents to act as junior options traders, performing three core tasks with increasing difficulty:
+VSR-Env enables LLM agents to act as junior options traders, performing five core tasks with increasing difficulty in a progressive curriculum:
 
-1. **Delta Hedging (Medium)**: Neutralize portfolio risk by managing Greek exposures through market shocks.
-2. **Earnings Vol Crush (Hard)**: Position for and recover from massive volatility drops (30-50% IV crush).
-3. **Gamma Scalping (Expert)**: Profit from path-dependent spot oscillations by dynamically re-hedging a high-gamma position.
+1. **Vol Regime Detection (Easy)**: Identify the pure variance regime analytically from the IV surface.
+2. **Delta Hedging (Medium)**: Neutralize portfolio directionality by managing Delta exposures through market shocks.
+3. **Earnings Vol Crush (Hard)**: Position for and recover from massive volatility drops (30-50% IV crush) via Vega management.
+4. **Gamma Scalping (Expert)**: Profit from path-dependent spot oscillations by dynamically re-hedging a high-gamma position against time decay.
+5. **Vega-Gamma Stress (Super-Boss)**: Pre-emptively stabilize deeply negative convexity (Vega/Gamma) before a random, catastrophic dual-market shock crashes the portfolio.
 
 ### Real-World Utility
 
@@ -83,44 +95,17 @@ The agent receives comprehensive market state through `VSRObservation`:
 | `last_action_error` | Optional[str] | Validation error from last action (if any) |
 | `expected_outcome` | Optional[str] | Ground-truth expected outcome for the task |
 
-## Tasks
+## Grading Transparency
 
-### Task 1: Delta Hedging (Medium)
+A full breakdown of how tasks are graded and penalized mathematically is available in [docs/GRADING.md](docs/GRADING.md).
 
-**Objective**: Neutralize portfolio delta to within ±0.05 while minimizing transaction costs during automated market shocks.
+## Installation & Deployment (OpenEnv CLI)
 
-- **Max Steps**: 5
-- **Difficulty**: Medium
-- **Grading (Episode)**: Score = neutralization_quality × 0.7 + cost_efficiency × 0.3
-- **Per-Step Reward**: delta_improvement × 0.5 + cost_efficiency × 0.3 + neutrality_bonus (0.1 if |delta| < 0.05) + reasoning_coherence × 0.2
-
-### Task 2: Earnings Vol Crush (Hard)
-
-**Objective**: Position the portfolio short vega before an earnings event (vol crush) and re-hedge delta after the event.
-
-- **Max Steps**: 8
-- **Difficulty**: Hard
-- **Grading (Episode)**: Score = pre_crush_positioning × 0.40 + post_crush_rehedge × 0.35 + pnl_outcome × 0.25
-- **Per-Step Reward**: pnl_change × 0.4 + greek_neutrality × 0.3 + reasoning_quality × 0.3
-
-### Task 3: Gamma Scalping (Expert)
-
-**Objective**: Profit from spot price oscillations by dynamically re-hedging a long ATM straddle position (high gamma).
-
-- **Max Steps**: 10
-- **Difficulty**: Expert
-- **Grading (Episode)**: Score = rehedge_quality × 0.40 + pnl_above_theta × 0.35 + timing_score × 0.25
-- **Per-Step Reward**: delta_neutrality × 0.5 + pnl_change × 0.3 + reasoning_quality × 0.2
-
-## Installation
-
-### Prerequisites
-
+### 1. Dependencies
 - Python 3.11+
-- pip
+- Docker (optional but recommended for evaluating)
 
-### Install from Source
-
+### 2. Local Setup
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -128,167 +113,57 @@ cd vsr-env
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Install the package
 pip install -e .
 ```
 
-### Docker Build
+### 3. OpenEnv Integration
+To test and push this workload into the OpenEnv evaluating cloud:
+```bash
+# Initialize OpenEnv
+openenv init
+
+# Test the manifest locally
+openenv test
+
+# Push the environment workload to registry
+openenv push --repo-id <username>/vsr-env
+```
+
+## Evaluation & Inference
+
+The `inference.py` script evaluates an LLM agent sequentially across all 5 tasks, enforcing the adaptive curriculum. If an agent fails to score at least 0.3 on an easier task, the curriculum breaks early.
 
 ```bash
-# Build the Docker image
-docker build -t vsr-env:latest .
-
-# Run the container
-docker run -p 8000:8000 vsr-env:latest
-```
-
-The server will start on `http://localhost:8000`.
-
-## Usage
-
-### API Endpoints
-
-The environment exposes a FastAPI server with the following endpoints:
-
-#### Reset
-
-```bash
-curl -X POST http://localhost:8000/reset?task_name=delta_hedging&seed=42
-```
-
-Response:
-```json
-{
-  "observation": {
-    "iv_surface": [[0.18, 0.19, 0.20], ...],
-    "spot_price": 100.0,
-    "portfolio_greeks": {"delta": 0.5, "gamma": 0.01, "vega": 0.05, "theta": -0.02},
-    "portfolio_pnl": 0.0,
-    "portfolio_positions": [],
-    "market_sentiment": 0.0,
-    "step_number": 0,
-    "steps_remaining": 5,
-    "task_name": "delta_hedging",
-    "task_description": "Neutralize portfolio delta to within ±0.05",
-    "last_action_error": null
-  }
-}
-```
-
-#### Step
-
-```bash
-curl -X POST http://localhost:8000/step \
-  -H "Content-Type: application/json" \
-  -d '{
-    "selected_strike": 2,
-    "selected_maturity": 0,
-    "direction": "sell",
-    "quantity": 1.0,
-    "reasoning": "Reducing long delta exposure by selling calls"
-  }'
-```
-
-Response:
-```json
-{
-  "observation": {...},
-  "reward": {"total": 0.65, "pnl_component": 0.0, "greek_component": 0.65, "reasoning_component": 0.0},
-  "done": false,
-  "info": {}
-}
-```
-
-#### State
-
-```bash
-curl http://localhost:8000/state
-```
-
-Response:
-```json
-{
-  "state": {
-    "episode_id": "...",
-    "step_count": 1,
-    "task_name": "delta_hedging",
-    "regime": "normal",
-    "spot_price": 100.5,
-    ...
-  }
-}
-```
-
-### Running Inference
-
-The `inference.py` script demonstrates environment usage with an LLM agent:
-
-```bash
-# Set environment variables
 export API_BASE_URL="https://router.huggingface.co/v1"
 export HF_TOKEN="your-huggingface-token"
-export MODEL_NAME="Qwen/Qwen2.5-72B-Instruct"
 
-# Run inference
+# Run progressive inference
 python inference.py
 ```
 
-The script runs all three tasks sequentially and outputs progress in the required format:
+### Inference Terminal Trace Example
+
+The server natively logs the strictly formatted OpenEnv terminal traces:
 
 ```
+[START] task=vol_regime_detection env=vsr_env model=llama-3.3-70b-versatile
+[STEP] step=1 action=hold(0,0,0.0) reward=1.00 done=true error=null
+[END] success=true steps=1 score=1.00 rewards=1.00
+
 [START] task=delta_hedging env=vsr_env model=llama-3.3-70b-versatile
-[STEP] step=1 action=sell(2,0,1.0) reward=0.65 done=false error=null
-[STEP] step=2 action=sell(3,0,0.5) reward=0.20 done=false error=null
-[STEP] step=3 action=hold(0,0,0.0) reward=0.10 done=true error=null
-[END] success=true steps=3 score=0.85 rewards=0.65,0.20,0.10
+[STEP] step=1 action=sell(4,1,2.0) reward=0.65 done=false error=null
+...
+[STEP] step=5 action=hold(0,0,0.0) reward=0.10 done=true error=null
+[END] success=true steps=5 score=0.85 rewards=0.65,...
+
+[START] task=earnings_vol_crush env=vsr_env model=llama-3.3-70b-versatile
+[STEP] step=1 action=sell(4,2,5.0) reward=0.55 done=false error=null
+...
 ```
 
-## Environment Variables
+## Global Telemetry
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `API_BASE_URL` | No | `https://router.huggingface.co/v1` | API endpoint for the LLM |
-| `MODEL_NAME` | No | `Qwen/Qwen2.5-72B-Instruct` | Model identifier for inference |
-| `HF_TOKEN` | Yes | - | Hugging Face API key (also accepts `API_KEY`) |
-| `IMAGE_NAME` | No | `vsr-env:latest` | Docker image name for deployment |
-| `LOG_LEVEL` | No | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
-
-## Architecture
-
-```
-vsr-env/
-├── vsr_env/
-│   ├── __init__.py
-│   ├── models.py           # Pydantic models (VSRAction, VSRObservation, etc.)
-│   ├── engine/
-│   │   ├── option_chain.py # Black-Scholes pricing, Greeks, IV solver
-│   │   ├── market_sim.py   # GBM simulation, regime shifts
-│   │   └── portfolio.py    # Position tracking, P&L computation
-│   ├── tasks/
-│   │   ├── delta_hedging.py # Delta Hedging task and grader
-│   │   ├── earnings_vol_crush.py # Vol Crush task and grader
-│   │   └── gamma_scalping.py # Gamma Scalping task and grader
-│   ├── reward/
-│   │   └── reward_computer.py # Per-step reward computation
-│   └── server/
-│       ├── app.py          # FastAPI application
-│       └── vsr_environment.py # Core environment implementation
-├── docs/
-│   └── ARCHITECTURE.md     # System architecture deep-dive
-├── inference.py            # Baseline inference script
-├── openenv.yaml            # OpenEnv manifest
-├── walkthrough.md          # Technical walkthrough
-└── README.md               # This file
-```
-
-## Performance
-
-The environment is designed to run on CPU-only infrastructure (vcpu=2, 8GB RAM):
-
-- Single step execution: < 2 seconds
-- Full episode (all 3 tasks): < 5 minutes
-- All computations use NumPy/SciPy (no GPU dependencies)
+The environment exposes a global `/telemetry` endpoint that tracks episodic trajectories, Greeks over time, portfolio PnL, and step rewards natively to power diagnostic plotting.
 
 ## License
 
@@ -296,4 +171,4 @@ MIT License
 
 ## Acknowledgments
 
-Built for the Meta PyTorch OpenEnv Hackathon × SST.
+Built for the Meta PyTorch OpenEnv Hackathon.
