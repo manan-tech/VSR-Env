@@ -4,7 +4,7 @@ Easy difficulty tier: Purely analytical task where the agent must
 identify the current market volatility regime based on the IV surface.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
 import numpy as np
 
 from vsr_env.models import VSRState
@@ -19,7 +19,7 @@ class VolRegimeDetectionTask:
         self.regimes = {"low": 0.01, "normal": 0.04, "high": 0.09}
         self.selected_regime = "normal"
 
-    def initialize(self, state: VSRState, rng: Any = None) -> Dict[str, Any]:
+    def initialize(self, state: VSRState, rng: Any = None) -> List[Tuple[Tuple[int, int], str, float]]:
         """Set up the volatility regime challenge."""
         if rng is None:
             rng = np.random.RandomState()
@@ -31,16 +31,7 @@ class VolRegimeDetectionTask:
         state.regime = self.selected_regime
         state.expected_outcome = self.selected_regime
 
-        return {
-            "task_name": "vol_regime_detection",
-            "task_description": (
-                "Analyze the provided IV surface and determine the current volatility "
-                "regime ('low', 'normal', or 'high'). Output an action holding 0 quantity "
-                "and state the exact regime in your reasoning."
-            ),
-            "variance": state.variance,
-            "regime": state.regime,
-        }
+        return []
 
     def get_description(self) -> str:
         return (
