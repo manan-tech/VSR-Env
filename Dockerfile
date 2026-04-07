@@ -26,15 +26,15 @@ COPY README.md .
 # Install the package
 RUN pip install --no-cache-dir -e .
 
-# Expose port 8000 (Requirement 14.3)
-EXPOSE 8000
+# Expose port 7860 (Hugging Face Requirement)
+EXPOSE 7860
 
 # Healthcheck endpoint (Requirement 14.5)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:7860/health || exit 1
 
 # Enable the built-in web interface for Hugging Face Spaces / judges
 ENV ENABLE_WEB_INTERFACE=true
 
 # Run uvicorn server (Requirement 14.4)
-CMD ["uvicorn", "vsr_env.server.app:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
+CMD ["uvicorn", "vsr_env.server.app:app", "--host", "0.0.0.0", "--port", "7860", "--log-level", "info"]
