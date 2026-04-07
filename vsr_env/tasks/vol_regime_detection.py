@@ -56,7 +56,7 @@ class VolRegimeDetectionGrader:
     """
 
     def __init__(self):
-        self.exact_match = ExactMatchRubric(case_sensitive=False)
+        self.exact_match = ExactMatchRubric()
 
     def score(self, episode_history: Dict[str, Any], state: VSRState) -> float:
         """Compute the final grade for the episode.
