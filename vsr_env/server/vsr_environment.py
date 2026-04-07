@@ -36,9 +36,18 @@ from vsr_env.tasks.earnings_vol_crush import (
     EarningsVolCrushGrader,
 )
 from vsr_env.tasks.gamma_scalping import GammaScalpingTask, GammaScalpingGrader
+from vsr_env.tasks.vol_regime_detection import (
+    VolRegimeDetectionTask,
+    VolRegimeDetectionGrader,
+)
 
 # Task configurations
 TASK_CONFIG = {
+    "vol_regime_detection": {
+        "max_steps": 1,
+        "task_class": VolRegimeDetectionTask,
+        "grader_class": VolRegimeDetectionGrader,
+    },
     "delta_hedging": {
         "max_steps": 5,
         "task_class": DeltaHedgingTask,
