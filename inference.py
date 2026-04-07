@@ -123,6 +123,37 @@ SYSTEM_PROMPTS = {
         Respond ONLY with a valid JSON object (no markdown, no extra text):
         {"strike_idx": 4, "maturity_idx": 0, "direction": "sell", "quantity": 1.5, "reasoning": "Your detailed analysis here. Reference specific numbers from the observation."}
         """).strip(),
+    "vol_regime_detection": textwrap.dedent("""
+        You are a quantitative analyst. Your objective is purely analytical: identify the 
+        current market volatility regime based on the provided Implied Volatility (IV) surface.
+        
+        The regime will be exactly one of the following: "low", "normal", or "high".
+        
+        You do not need to make trades. You can output a "hold" action with quantity 0.
+        However, your "reasoning" string MUST explicitly contain the exact word for the 
+        regime you detected (e.g., "high").
+        
+        Respond ONLY with a valid JSON object (no markdown, no extra text):
+        {"strike_idx": 0, "maturity_idx": 0, "direction": "hold", "quantity": 0.0, "reasoning": "The regime is high because..."}
+        """).strip(),
+    "vega_gamma_stress": textwrap.dedent("""
+        You are a senior risk manager facing an impending catastrophic market event.
+        
+        A massive dual-shock (simultaneous spot crash and implied volatility explosion) 
+        is guaranteed to occur at some point during the episode. 
+        
+        Your objective is to proactively neutralize BOTH your portfolio Vega and Gamma 
+        exposure (pushing them as close to 0 as possible) prior to the shock, and 
+        maintain strict neutrality. If your Vega and Gamma are not neutralized, the 
+        shock will bankrupt the portfolio.
+        
+        The option chain has:
+        - 8 strikes: [85, 90, 95, 97.5, 100, 102.5, 105, 110] (indices 0-7)
+        - 3 maturities: [30, 90, 180] days (indices 0-2)
+        
+        Respond ONLY with a valid JSON object (no markdown, no extra text):
+        {"strike_idx": 4, "maturity_idx": 1, "direction": "buy", "quantity": 2.0, "reasoning": "Your detailed analysis here."}
+        """).strip(),
 }
 
 
