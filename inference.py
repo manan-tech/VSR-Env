@@ -44,19 +44,33 @@ TASKS = [
     "gamma_scalping",
     "vega_gamma_stress",
 ]
-MAX_STEPS_PER_TASK = {
-    "vol_regime_detection": 3,
-    "delta_hedging": 7,
-    "earnings_vol_crush": 10,
-    "gamma_scalping": 15,
-    "vega_gamma_stress": 25,
+
+# Number of episodes to run per task (standard: 1 episode per task)
+EPISODE_COUNTS = {
+    "vol_regime_detection": 1,
+    "delta_hedging": 1,
+    "earnings_vol_crush": 1,
+    "gamma_scalping": 1,
+    "vega_gamma_stress": 1,
 }
+
+# Max steps per episode for each task (episode length)
+# This defines the complexity ladder: Easy(3 steps) → Super-Boss(20 steps)
+MAX_STEPS_PER_TASK = {
+    "vol_regime_detection": 3,      # Easy: 3 steps
+    "delta_hedging": 8,             # Medium: 8 steps
+    "earnings_vol_crush": 13,       # Hard: 13 steps
+    "gamma_scalping": 17,           # Expert: 17 steps
+    "vega_gamma_stress": 20,        # Super-Boss: 20 steps
+}
+
+# Fixed seeds for reproducibility (one per task)
 TASK_SEEDS = {
     "vol_regime_detection": 101,
-    "delta_hedging": 123,
-    "earnings_vol_crush": 456,
-    "gamma_scalping": 789,
-    "vega_gamma_stress": 999,
+    "delta_hedging": 202,
+    "earnings_vol_crush": 303,
+    "gamma_scalping": 404,
+    "vega_gamma_stress": 505,
 }
 
 # LLM configuration
@@ -744,8 +758,8 @@ async def run_task(
 async def main() -> None:
     """Main entry point.
 
-    Initializes environment, runs all three tasks sequentially,
-    prints final summary.
+    Runs one episode per task with multiple steps per episode.
+    Each task has a different max_steps to create a difficulty ladder.
 
     Requirements: 12.2
     """
@@ -758,34 +772,56 @@ async def main() -> None:
     # Initialize environment
     env = VSREnvironment()
 
-    # Run all tasks sequentially (Adaptive Curriculum)
-    scores = {}
+    # Track scores across tasks
+    task_scores = {}
 
+    print("\n" + "="*60)
+    print("VSR-Env 5-Tier Adaptive Curriculum")
+    print("="*60)
+    print(f"Tasks: {len(TASKS)}")
+    print(f"Episodes per task: 1")
+    print(f"Steps per episode: 3 → 8 → 13 → 17 → 20 (difficulty ladder)")
+    print("="*60)
+
+    # Run each task once (one episode per task, multiple steps per episode)
     for task_name in TASKS:
+        max_steps = MAX_STEPS_PER_TASK[task_name]
         seed = TASK_SEEDS[task_name]
+
+        print(f"\n{'─'*60}")
+        print(f"TASK: {task_name}")
+        print(f"{'─'*60}")
+        print(f"  Difficulty: {max_steps} steps")
+        print(f"  Seed: {seed}")
+        print(f"{'─'*60}\n")
+
+        # Run single episode
         score = await run_task(client, env, task_name, seed)
-        scores[task_name] = score
-
-        # Adaptive Curriculum: Break if the baseline score isn't met
-        # if score < 0.3:
-        #     print()
-        #     print(
-        #         f"[{task_name.upper()} FAILED] Score {score:.2f} < 0.3. Halting curriculum early."
-        #     )
-        #     break
-
-        print()  # Blank line between tasks
+        task_scores[task_name] = score
 
     # Print final summary
-    print("=" * 60)
-    print("FINAL SUMMARY (ADAPTIVE CURRICULUM)")
-    print("=" * 60)
-    for task_name, score in scores.items():
-        print(f"  {task_name}: {score:.2f}")
+    print(f"\n{'='*60}")
+    print("FINAL SUMMARY")
+    print(f"{'='*60}")
 
-    if len(scores) > 0:
-        print(f"  Average Completed: {sum(scores.values()) / len(scores):.2f}")
-    print("=" * 60)
+    total_score = 0.0
+    total_successes = 0
+
+    for task_name, score in task_scores.items():
+        max_steps = MAX_STEPS_PER_TASK[task_name]
+        success = score >= SUCCESS_SCORE_THRESHOLD
+        total_score += score
+        total_successes += 1 if success else 0
+
+        status = "✓ PASS" if success else "✗ FAIL"
+        print(f"  {task_name:25s} [{max_steps:2d} steps]: {score:.3f} {status}")
+
+    overall_avg = total_score / len(task_scores) if task_scores else 0.0
+    overall_success_rate = total_successes / len(task_scores) if task_scores else 0.0
+
+    print(f"\n  Overall Average: {overall_avg:.3f}")
+    print(f"  Success Rate: {overall_success_rate:.1%} ({total_successes}/{len(task_scores)})")
+    print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":

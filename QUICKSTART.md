@@ -42,28 +42,66 @@ python inference.py
 ## ✅ Expected Output
 
 ```
+============================================================
+VSR-Env 5-Tier Adaptive Curriculum
+============================================================
+Tasks: 5
+Episodes per task: 1
+Steps per episode: 3 → 8 → 13 → 17 → 20 (difficulty ladder)
+============================================================
+
+────────────────────────────────────────────────────────────
+TASK: vol_regime_detection
+────────────────────────────────────────────────────────────
+  Difficulty: 3 steps
+  Seed: 101
+────────────────────────────────────────────────────────────
+
 [START] task=vol_regime_detection env=vsr_env model=llama-3.1-8b-instant
-[STEP] step=1 action=hold(0,0,0.0) reward=0.80 done=true error=null
-[END] success=true steps=1 score=0.80 rewards=0.80
+[STEP] step=1 action=hold(0,0,0.0) reward=0.80 done=false error=null
+[STEP] step=2 action=hold(0,0,0.0) reward=0.75 done=false error=null
+[STEP] step=3 action=hold(0,0,0.0) reward=0.82 done=true error=null
+[END] success=true steps=3 score=0.80 rewards=0.80,0.75,0.82
+
+────────────────────────────────────────────────────────────
+TASK: delta_hedging
+────────────────────────────────────────────────────────────
+  Difficulty: 8 steps
+  Seed: 202
+────────────────────────────────────────────────────────────
 
 [START] task=delta_hedging env=vsr_env model=llama-3.1-8b-instant
 [STEP] step=1 action=sell(4,0,2.0) reward=0.72 done=false error=null
-[STEP] step=2 action=sell(4,0,1.0) reward=0.68 done=false error=null
+[STEP] step=2 action=hold(0,0,0.0) reward=0.10 done=false error=null
+[STEP] step=3 action=sell(4,0,1.0) reward=0.88 done=false error=null
 ...
-[END] success=true steps=5 score=0.75 rewards=0.72,0.68,0.88,0.52,0.65
+[STEP] step=8 action=sell(5,1,0.5) reward=0.65 done=true error=null
+[END] success=true steps=8 score=0.75 rewards=0.72,0.10,0.88,...
 
+────────────────────────────────────────────────────────────
+TASK: earnings_vol_crush (13 steps)
 ...
 
-===============================================
-FINAL SUMMARY (ADAPTIVE CURRICULUM)
-===============================================
-  vol_regime_detection: 0.80
-  delta_hedging: 0.75
-  earnings_vol_crush: 0.68
-  gamma_scalping: 0.62
-  vega_gamma_stress: 0.71
-  Average Completed: 0.71
-===============================================
+────────────────────────────────────────────────────────────
+TASK: gamma_scalping (17 steps)
+...
+
+────────────────────────────────────────────────────────────
+TASK: vega_gamma_stress (20 steps)
+...
+
+============================================================
+FINAL SUMMARY
+============================================================
+  vol_regime_detection        [ 3 steps]: 0.800 ✓ PASS
+  delta_hedging               [ 8 steps]: 0.750 ✓ PASS
+  earnings_vol_crush          [13 steps]: 0.684 ✓ PASS
+  gamma_scalping              [17 steps]: 0.618 ✗ FAIL
+  vega_gamma_stress           [20 steps]: 0.592 ✗ FAIL
+
+  Overall Average: 0.689
+  Success Rate: 60.0% (3/5)
+============================================================
 ```
 
 ---

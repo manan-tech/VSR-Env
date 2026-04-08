@@ -36,7 +36,8 @@ Unlike standard classification or simple control environments, VSR-Env challenge
 | **Observation** | IV surface grid + Greeks + PnL + positions + market sentiment |
 | **Reward Range** | Deterministic heuristic grading in `[0.01, 0.99]` |
 | **Difficulty Tiers** | 5 levels (Easy → Super-Boss) with early-stopping curriculum |
-| **Episode Length** | 1-15 steps (task-dependent) |
+| **Episode Length** | 3-20 steps per episode (task-dependent difficulty) |
+| **Total Episodes** | 5 (one per task) |
 | **Grading** | Gaussian boundaries, delta neutrality, PnL-weighted |
 
 ---
@@ -44,27 +45,27 @@ Unlike standard classification or simple control environments, VSR-Env challenge
 ## 📚 5-Tier Adaptive Curriculum
 
 ### Tier 1: **Volatility Regime Detection** (Easy)
-- **Max Steps**: 1
+- **Max Steps**: 3
 - **Challenge**: Classify IV surface as "low", "normal", or "high" regime
 - **Skills**: Pattern recognition, surface reading
 
 ### Tier 2: **Delta Hedging** (Medium)
-- **Max Steps**: 5
+- **Max Steps**: 8
 - **Challenge**: Maintain |delta| < 0.05 through market shock
 - **Skills**: Delta neutrality, counter-trading, cost efficiency
 
 ### Tier 3: **Earnings Vol Crush** (Hard)
-- **Max Steps**: 8
+- **Max Steps**: 13
 - **Challenge**: Position for IV collapse at step 6, then re-hedge
 - **Skills**: Temporal prediction, vega management, event timing
 
 ### Tier 4: **Gamma Scalping** (Expert)
-- **Max Steps**: 12
+- **Max Steps**: 17
 - **Challenge**: Profit from delta oscillations with high gamma
 - **Skills**: Dynamic re-hedging, theta management, trade timing
 
 ### Tier 5: **Vega/Gamma Stress** (Super-Boss)
-- **Max Steps**: 15
+- **Max Steps**: 20
 - **Challenge**: Achieve dual neutrality (|vega| < 0.05 AND |gamma| < 0.02) before catastrophic shock
 - **Skills**: Multi-derivative hedging, Gaussian boundary optimization, risk decomposition
 
