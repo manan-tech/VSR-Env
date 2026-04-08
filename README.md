@@ -234,6 +234,22 @@ openenv validate
 
 ---
 
+## 📊 Benchmark Results
+
+Tested with **Amazon Nova Pro v1** model via **LiteLLM proxy**.
+
+| Task | Difficulty | Steps | Score | Status |
+|---|---|---|---|---|
+| vol_regime_detection | Easy | 3 | 0.990 | ✓ PASS |
+| delta_hedging | Medium | 8 | 0.671 | ✓ PASS |
+| earnings_vol_crush | Hard | 13 | 0.650 | ✓ PASS |
+| gamma_scalping | Expert | 17 | 0.042 | ✗ FAIL |
+| vega_gamma_stress | Super-Boss | 20 | 0.151 | ✓ PASS |
+
+**Overall**: 80.0% success rate (4/5 tasks)
+
+---
+
 ## 🌐 Deployed Endpoints
 
 | Platform | URL |
@@ -296,21 +312,6 @@ atm puts."
 | **Reward Transparency** | Component breakdown in every step | Black-box scalar |
 | **Reasoning Evaluation** | Keyword + numeric citation scoring | Often ignored |
 | **Difficulty Ceiling** | Super-Boss requires mathematical optimization | Binary success/fail |
-
----
-
-## 🎓 Citation
-
-If you use VSR-Env in your research, please cite:
-
-```bibtex
-@misc{vsr-env-2025,
-  title={VSR-Env: A Reinforcement Learning Benchmark for Volatility Surface Reasoning},
-  author={Manan Bansal},
-  year={2025},
-  howpublished={Meta × PyTorch × SST OpenEnv AI Hackathon}
-}
-```
 
 ---
 
