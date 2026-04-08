@@ -183,7 +183,7 @@ class GammaScalpingGrader:
             state: Final VSRState with portfolio_delta, portfolio_pnl, and initial_theta
 
         Returns:
-            Score in [0.0, 1.0]
+            Score in [0.01, 0.99]
 
         Requirements: 6.4, 6.5, 6.6
         """
@@ -263,8 +263,8 @@ class GammaScalpingGrader:
         # Final score: weighted combination
         score = rehedge_quality * 0.40 + pnl_above_theta * 0.35 + timing_score * 0.25
 
-        # Clamp to [0.0, 1.0]
-        return min(max(score, 0.0), 1.0)
+        # Clamp to [0.01, 0.99]
+        return min(max(score, 0.01), 0.99)
 
     def _sigmoid(self, x: float, scale: float = 0.3) -> float:
         """Sigmoid function centered at 0."""

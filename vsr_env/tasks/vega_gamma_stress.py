@@ -102,7 +102,7 @@ class VegaGammaStressGrader:
         """Compute the final grade using strict standard deviation bounds."""
         steps = episode_history
         if not steps:
-            return 0.0
+            return 0.01
 
         shock_step = getattr(state, "dual_shock_step", 6)
 
@@ -164,4 +164,4 @@ class VegaGammaStressGrader:
             reasoning_score = float(self.reasoning_rubric.score(all_reasoning, None))
 
         final_score = (vg_score * 0.5) + (pnl_score * 0.3) + (reasoning_score * 0.2)
-        return float(np.clip(final_score, 0.0, 1.0))
+        return float(np.clip(final_score, 0.01, 0.99))

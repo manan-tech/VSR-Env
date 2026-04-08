@@ -161,7 +161,7 @@ async def step(action: VSRAction):
             if result["done"]:
                 tracker.complete_episode(
                     episode_id=env.state.episode_id,
-                    final_score=result["info"].get("grader_score", 0.0),
+                    final_score=result["info"].get("grader_score", 0.01),
                 )
 
         return {

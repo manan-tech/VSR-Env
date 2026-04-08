@@ -1,7 +1,7 @@
 """Reward computation for VSR-Env.
 
 Provides meaningful per-step signals that enable agents to learn from trajectory feedback.
-All rewards are normalized to contribute to a total in the approximate range [0.0, 1.0].
+All rewards are normalized to contribute to a total in the approximate range [0.01, 0.99].
 """
 
 import math
@@ -44,7 +44,7 @@ def sigmoid(x: float, scale: float = 0.3) -> float:
         scale: Scale parameter (default 0.3)
 
     Returns:
-        Sigmoid output in range (0.0, 1.0)
+        Sigmoid output in range (0.01, 0.99)
 
     Requirements: 10.4
     """
@@ -67,7 +67,7 @@ def score_reasoning_quality(
         state: Current state with spot price and portfolio delta
 
     Returns:
-        Score in [0.0, 1.0]
+        Score in [0.01, 0.99]
 
     Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8
     """
@@ -119,7 +119,7 @@ def score_reasoning_quality(
 
     # Clamp to valid range
     # Requirements: 11.8
-    return min(max(score, 0.0), 1.0)
+    return min(max(score, 0.01), 0.99)
 
 
 class RewardComputer:
@@ -127,7 +127,7 @@ class RewardComputer:
 
     Provides meaningful per-step signals that enable agents to learn
     from trajectory feedback. All rewards are normalized to contribute
-    to a total in the approximate range [0.0, 1.0].
+    to a total in the approximate range [0.01, 0.99].
 
     Requirements: 10.1
     """
@@ -189,8 +189,8 @@ class RewardComputer:
         reasoning_score = score_reasoning_quality(action.reasoning, observation, state)
         reasoning_component = reasoning_score * 0.2
 
-        # Total is clamped to [0.0, 1.0]
-        total = min(identification + reasoning_component, 1.0)
+        # Total is clamped to [0.01, 0.99]
+        total = min(max(identification + reasoning_component, 0.01), 0.99)
 
         return VSRReward(
             total=total,
@@ -249,9 +249,9 @@ class RewardComputer:
         reasoning_score = score_reasoning_quality(action.reasoning, observation, state)
         reasoning_reward = reasoning_score * 0.2
 
-        # Total is clamped to [0.0, 1.0]
+        # Total is clamped to [0.01, 0.99]
         total = min(
-            delta_reward + cost_reward + neutrality_bonus + reasoning_reward, 1.0
+            max(delta_reward + cost_reward + neutrality_bonus + reasoning_reward, 0.01), 0.99
         )
 
         return VSRReward(
@@ -302,8 +302,8 @@ class RewardComputer:
         reasoning_score = score_reasoning_quality(action.reasoning, observation, state)
         reasoning_reward = reasoning_score * 0.3
 
-        # Total is clamped to [0.0, 1.0]
-        total = min(pnl_reward + greek_reward + reasoning_reward, 1.0)
+        # Total is clamped to [0.01, 0.99]
+        total = min(max(pnl_reward + greek_reward + reasoning_reward, 0.01), 0.99)
 
         return VSRReward(
             total=total,
@@ -397,8 +397,8 @@ class RewardComputer:
         reasoning_score = score_reasoning_quality(action.reasoning, observation, state)
         reasoning_reward = reasoning_score * 0.2
 
-        # Total is clamped to [0.0, 1.0]
-        total = min(delta_neutrality + pnl_reward + reasoning_reward, 1.0)
+        # Total is clamped to [0.01, 0.99]
+        total = min(max(delta_neutrality + pnl_reward + reasoning_reward, 0.01), 0.99)
 
         return VSRReward(
             total=total,
@@ -454,7 +454,7 @@ class RewardComputer:
         reasoning_score = score_reasoning_quality(action.reasoning, observation, state)
         reasoning_component = reasoning_score * 0.2
 
-        total = min(identification + reasoning_component, 1.0)
+        total = min(max(identification + reasoning_component, 0.01), 0.99)
 
         return VSRReward(
             total=total,
@@ -501,8 +501,8 @@ class RewardComputer:
         reasoning_score = score_reasoning_quality(action.reasoning, observation, state)
         reasoning_reward = reasoning_score * 0.2
 
-        # Total is clamped to [0.0, 1.0]
-        total = min(vg_neutrality + pnl_reward + reasoning_reward, 1.0)
+        # Total is clamped to [0.01, 0.99]
+        total = min(max(vg_neutrality + pnl_reward + reasoning_reward, 0.01), 0.99)
 
         return VSRReward(
             total=total,
