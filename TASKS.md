@@ -8,11 +8,11 @@ VSR-Env transitions away from single-mode simulations in favor of a **5-tier ada
 
 | Tier | Task Name | Max Steps | Key Skills | Difficulty |
 |---|---|---|---|---|
-| 1 | **Vol Regime Detection** | 1 | IV surface classification | Easy |
-| 2 | **Delta Hedging** | 5 | Greek neutrality, counter-trading | Medium |
-| 3 | **Earnings Vol Crush** | 8 | Temporal prediction, event timing | Hard |
-| 4 | **Gamma Scalping** | 12 | Dynamic re-hedging, profit scalping | Expert |
-| 5 | **Vega/Gamma Stress** | 15 | Multi-derivative optimization | Super-Boss |
+| 1 | **Vol Regime Detection** | 3 | IV surface classification | Easy |
+| 2 | **Delta Hedging** | 8 | Greek neutrality, counter-trading | Medium |
+| 3 | **Earnings Vol Crush** | 13 | Temporal prediction, event timing | Hard |
+| 4 | **Gamma Scalping** | 17 | Dynamic re-hedging, profit scalping | Expert |
+| 5 | **Vega/Gamma Stress** | 20 | Multi-derivative optimization | Super-Boss |
 
 ---
 
@@ -20,7 +20,7 @@ VSR-Env transitions away from single-mode simulations in favor of a **5-tier ada
 
 ### Metadata
 - **Task ID**: `vol_regime_detection`
-- **Max Steps**: 1
+- **Max Steps**: 3
 - **Pass Threshold**: Score ≥ 0.10
 
 ### Objective
@@ -72,7 +72,7 @@ Score: 0.15
 
 ### Metadata
 - **Task ID**: `delta_hedging`
-- **Max Steps**: 5
+- **Max Steps**: 8
 - **Pass Threshold**: Score ≥ 0.30
 
 ### Objective
@@ -94,9 +94,9 @@ total = delta_reward + cost_efficiency + neutrality_bonus + reasoning_reward
 ```
 
 ### Event Timeline
-- **Step 1-2**: Agent can trade to neutralize initial delta
-- **Step 3**: Market shock (spot jumps ±5-8%, delta drifts)
-- **Step 4-5**: Agent must re-hedge to maintain neutrality
+- **Step 1-4**: Agent can trade to neutralize initial delta
+- **Step 5**: Market shock (spot jumps ±5-8%, delta drifts)
+- **Step 6-8**: Agent must re-hedge to maintain neutrality
 
 ### Optimal Strategy
 ```
@@ -105,11 +105,11 @@ Step 1: Portfolio Delta = 2.4
   New Delta: 0.08
   Reward: 0.72
 
-Step 2: No movement
+Step 2-3: No movement
   Action: Hold
-  Reward: 0.10
+  Reward: 0.10 per step
 
-Step 3: Market shock, Delta spikes to 1.2
+Step 5: Market shock, Delta spikes to 1.2
   Action: Sell 1 OTM call (strike=105, maturity=30d)
   New Delta: 0.04
   Reward: 0.88
@@ -123,7 +123,7 @@ Step 1: Portfolio Delta = 2.4
   Action: Hold (do nothing)
   Reward: 0.10
 
-Step 2: Market shock occurs early, Delta = 4.1
+Step 5: Market shock occurs, Delta = 4.1
   Action: Sell 4 ATM calls
   New Delta: 0.02
   Trade Cost: High (over-trading penalty)
@@ -138,7 +138,7 @@ Total Score: 0.34 (marginal pass)
 
 ### Metadata
 - **Task ID**: `earnings_vol_crush`
-- **Max Steps**: 8
+- **Max Steps**: 13
 - **Pass Threshold**: Score ≥ 0.40
 
 ### Objective
@@ -156,9 +156,9 @@ total = pnl_reward + delta_neutrality + reasoning_reward
 ```
 
 ### Event Timeline
-- **Step 1-5**: Elevated IV, agent should liquidate vega positions
-- **Step 6**: **Earnings released, IV crush occurs (-40%)**
-- **Step 7-8**: Spot may jump ±5%, agent re-hedges delta
+- **Step 1-10**: Elevated IV, agent should liquidate vega positions
+- **Step 11**: **Earnings released, IV crush occurs (-40%)**
+- **Step 12-13**: Spot may jump ±5%, agent re-hedges delta
 
 ### Optimal Strategy (Short Vega)
 ```
@@ -168,11 +168,11 @@ Step 1: Portfolio Vega = 0.50, IV = 0.35 (elevated)
   Reasoning: "Pre-earnings IV spike, positioning for crush"
   Reward: 0.45
 
-Step 5: Portfolio Vega = 0.20
+Step 5-10: Portfolio Vega = 0.20
   (No action, holding short vega)
-  Reward: 0.12
+  Reward: 0.12 per step
 
-Step 6: IV crush occurs, Vega PnL = +0.32
+Step 11: IV crush occurs, Vega PnL = +0.32
   Reasoning: "Earnings released, captured vol crush profit"
   Reward: 0.92
 
@@ -186,7 +186,7 @@ Step 1: Portfolio Vega = 0.50, IV = 0.35
   New Vega: 0.80
   Reward: 0.35
 
-Step 6: IV crush occurs, Vega PnL = -0.48
+Step 11: IV crush occurs, Vega PnL = -0.48
   Reward: 0.08 (massive pnl_component loss)
 
 Total Score: 0.22 (failed)
@@ -198,7 +198,7 @@ Total Score: 0.22 (failed)
 
 ### Metadata
 - **Task ID**: `gamma_scalping`
-- **Max Steps**: 12
+- **Max Steps**: 17
 - **Pass Threshold**: Score ≥ 0.50
 
 ### Objective
@@ -265,13 +265,13 @@ Total Score: 0.28 (failed)
 
 ### Metadata
 - **Task ID**: `vega_gamma_stress`
-- **Max Steps**: 15
-- **Pass Threshold**: Score ≥ 0.60
+- **Max Steps**: 20
+- **Pass Threshold**: Score ≥ 0.10
 
 ### Objective
-Construct a multi-legged position over the first 10 steps that drives **both** net Vega and net Gamma explicitly to `0.0` (within tight tolerance) to survive a catastrophic dual-shock event.
+Construct a multi-legged position over the first 15 steps that drives **both** net Vega and net Gamma explicitly to `0.0` (within tight tolerance) to survive a catastrophic dual-shock event.
 
-**Critical Event**: At **Step 10**, a macro shock occurs:
+**Critical Event**: At **Step 15**, a macro shock occurs:
 - Spot crashes -15%
 - Implied volatility spikes +60%
 
@@ -292,6 +292,7 @@ The exponential decay ensures **no slack** outside the tolerance zone:
 - Vega at 0.05 (threshold) → `vega_score = exp(-0.5) = 0.61`
 - Vega at 0.10 (2× threshold) → `vega_score = exp(-2.0) = 0.14`
 - Vega at 0.20 (4× threshold) → `vega_score = exp(-8.0) = 0.0003`
+- Gamma at 0.02 (threshold) → `gamma_score = exp(-0.5) = 0.61`
 
 **This forces exact mathematical optimization.**
 
@@ -307,12 +308,12 @@ Step 5: Portfolio Vega = 0.08, Gamma = 0.12
   New Gamma: 0.05
   New Vega: 0.15 (vega increased, acceptable)
 
-Step 8: Portfolio Vega = 0.10, Gamma = 0.03
+Step 12: Portfolio Vega = 0.10, Gamma = 0.03
   Action: Sell OTM straddle (fine-tunes both)
   New Vega: 0.03
   New Gamma: 0.01
 
-Step 10: Dual shock occurs
+Step 15: Dual shock occurs
   Vega = 0.03 → vega_score = exp(-0.18) = 0.84
   Gamma = 0.01 → gamma_score = exp(-0.125) = 0.88
   vg_neutrality = (0.84 * 0.5 + 0.88 * 0.5) * 0.5 = 0.43
@@ -323,10 +324,10 @@ Total Score: 0.82 (passed)
 
 ### Failure Mode
 ```
-Step 1-9: Agent only hedges delta, ignores vega/gamma
+Step 1-14: Agent only hedges delta, ignores vega/gamma
   Vega = 0.42, Gamma = 0.28
 
-Step 10: Dual shock occurs
+Step 15: Dual shock occurs
   Portfolio PnL = -0.68 (catastrophic)
   Vega score = exp(-35.3) ≈ 0.0
   Gamma score = exp(-98.0) ≈ 0.0

@@ -30,9 +30,9 @@ Delta Hedging tasks calculate reward inversely proportional to the absolute Delt
 ### 3. Vega-Gamma Dual Bound Matrix (Super-Boss)
 The hardest task deploys aggressive Standard Deviation parameters. When neutralizing a portfolio for the `vega_gamma_stress` task, the score is graded based on Gaussian boundaries:
 `vega_score = np.exp(-0.5 * (avg_vega / 0.05) ** 2)`
-`gamma_score = np.exp(-0.5 * (avg_gamma / 0.05) ** 2)`
+`gamma_score = np.exp(-0.5 * (avg_gamma / 0.02) ** 2)`
 
-This means the agent *must* drive its net Vega and net Gamma explicitly to `0.0`. If it drifts outside the tight +/- 0.05 bounds, the Gaussian curve rapidly drops its multiplier to 0.0, aggressively tanking the unified score regardless of its raw theoretical PnL.
+This means the agent *must* drive its net Vega (within ±0.05) and net Gamma (within ±0.02) explicitly to `0.0`. If either drifts outside these tight bounds, the Gaussian curve rapidly drops its multiplier to 0.0, aggressively tanking the unified score regardless of its raw theoretical PnL.
 
 ---
 
@@ -182,8 +182,8 @@ Step 3: Spot=98, Delta=-1.6
 
 **Formula**:
 ```python
-vega_score = exp(-0.5 * (abs(vega) / 0.05) ** 2)
-gamma_score = exp(-0.5 * (abs(gamma) / 0.02) ** 2)
+vega_score = np.exp(-0.5 * (avg_vega / 0.05) ** 2)
+gamma_score = np.exp(-0.5 * (avg_gamma / 0.02) ** 2)
 vg_neutrality = (vega_score * 0.5 + gamma_score * 0.5) * 0.5
 
 pnl_reward = sigmoid(pnl_change, scale=0.5) * 0.3
