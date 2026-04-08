@@ -88,7 +88,7 @@ async def web_ui():
     """Serve the Custom Web UI dashboard."""
     ui_path = os.path.join(os.path.dirname(__file__), "index.html")
     try:
-        with open(ui_path, "r") as f:
+        with open(ui_path, "r", encoding="utf-8") as f:
             html = f.read()
         return HTMLResponse(content=html, status_code=200)
     except Exception as e:
