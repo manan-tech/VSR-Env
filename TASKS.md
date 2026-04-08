@@ -356,7 +356,6 @@ for task_name in TASKS:
 **Why This Matters**:
 - Forces agents to master fundamentals before attempting Super-Boss
 - Prevents "gaming" later tasks without foundational skills
-- Judges can see where the agent failed (transparent evaluation)
 
 ---
 
@@ -407,11 +406,6 @@ Every task mirrors actual trading desk challenges:
 
 ### 3. **Mathematical Rigor**
 Super-Boss is not just "harder" — it requires **dual-derivative optimization** under Gaussian constraints. This is quant-level reasoning.
-
-### 4. **Transparent Difficulty**
-Judges can see exactly where an agent fails:
-- "Passed Easy/Medium, failed Hard at Earnings Crush"
-- Not a mysterious aggregate score
 
 ---
 
