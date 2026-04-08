@@ -61,19 +61,6 @@ class VSRReward(BaseModel):
     identification_component: Optional[float]  # Correct regime/mispricing ID
 ```
 
-### Why Component Breakdown Matters
-
-**For Judges:**
-- Instantly see *why* an agent scored well/poorly
-- Diagnose failure modes (e.g., "Good PnL but terrible reasoning")
-- Compare trajectories component-wise
-
-**For Agents:**
-- LLM receives structured feedback in trajectory history
-- Can adjust strategy mid-episode ("My reasoning component is low, I should elaborate")
-
----
-
 ## Per-Task Reward Formulas
 
 ### Task 1: Volatility Regime Detection
@@ -291,7 +278,7 @@ reasoning = "The IV at 100-strike is 0.32, spot is 102.4, regime is high"
 
 ---
 
-## Why This Reward System Wins
+## Pros of reward system
 
 ### 1. **Full Transparency**
 Judges can inspect every component:
