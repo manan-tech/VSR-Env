@@ -58,16 +58,16 @@ class VolRegimeDetectionGrader:
             state: Final environment state (contains ground truth)
 
         Returns:
-            Float between 0.0 and 1.0 indicating detection accuracy
+            Float between 0.01 and 0.99 indicating detection accuracy
         """
         steps = episode_history
         if not steps:
-            return 0.0
+            return 0.01
 
         # Extract the reasoning from the first action (since it's a 1-step task usually)
         first_action = steps[0].get("action")
         if first_action is None:
-            return 0.0
+            return 0.01
             
         reasoning = getattr(first_action, "reasoning", "")
         if not reasoning and isinstance(first_action, dict):
@@ -78,6 +78,6 @@ class VolRegimeDetectionGrader:
         # Check if the correct regime string is present in the reasoning payload
         if expected and isinstance(reasoning, str):
             if expected.lower() in reasoning.lower():
-                return 1.0
+                return 0.99
 
-        return 0.0
+        return 0.01

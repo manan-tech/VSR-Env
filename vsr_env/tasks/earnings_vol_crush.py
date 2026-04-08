@@ -104,7 +104,7 @@ class EarningsVolCrushGrader:
             state: Final VSRState with portfolio_vega, vol_crush_step, and portfolio_pnl
 
         Returns:
-            Score in [0.0, 1.0]
+            Score in [0.01, 0.99]
 
         Requirements: 5.4, 5.5, 5.6
         """
@@ -163,8 +163,8 @@ class EarningsVolCrushGrader:
             + pnl_outcome * 0.25
         )
 
-        # Clamp to [0.0, 1.0]
-        return min(max(score, 0.0), 1.0)
+        # Clamp to [0.01, 0.99]
+        return min(max(score, 0.01), 0.99)
 
     def _sigmoid(self, x: float, scale: float = 0.3) -> float:
         """Sigmoid function centered at 0."""

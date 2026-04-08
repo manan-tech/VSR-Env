@@ -299,7 +299,7 @@ class VSREnvironment:
             grader_score = self._current_grader.score(
                 self._episode_history, self._state
             )
-            info["grader_score"] = float(min(max(grader_score, 0.0), 1.0))
+            info["grader_score"] = float(min(max(grader_score, 0.01), 0.99))
 
         return {
             "observation": obs,
@@ -372,7 +372,7 @@ class VSREnvironment:
         """Compute reward based on current task."""
         if error is not None:
             # Invalid action gets zero reward
-            return VSRReward(total=0.0)
+            return VSRReward(total=0.01)
 
         task = self._state.task_name
 
@@ -402,4 +402,4 @@ class VSREnvironment:
                 action, self._state, obs
             )
         else:
-            return VSRReward(total=0.0)
+            return VSRReward(total=0.01)

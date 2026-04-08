@@ -159,7 +159,7 @@ class DeltaHedgingGrader:
             state: Final VSRState with portfolio_delta, initial_delta, and regime_shift_step
 
         Returns:
-            Score in [0.0, 1.0]
+            Score in [0.01, 0.99]
 
         Requirements: 4.5, 4.6
         """
@@ -229,5 +229,5 @@ class DeltaHedgingGrader:
             + cost_efficiency * 0.30
         )
 
-        # Clamp to [0.0, 1.0]
-        return min(max(score, 0.0), 1.0)
+        # Clamp to [0.01, 0.99]
+        return min(max(score, 0.01), 0.99)
