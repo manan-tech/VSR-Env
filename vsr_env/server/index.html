@@ -627,6 +627,25 @@
                     </div>
 
                     <div class="input-group">
+                        <label>Strategy</label>
+                        <select id="strategy-type">
+                            <option value="single">Single Leg</option>
+                            <option value="straddle">Straddle</option>
+                            <option value="strangle">Strangle</option>
+                            <option value="vertical_spread">Vertical Spread</option>
+                            <option value="calendar_spread">Calendar Spread</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Option Type</label>
+                        <select id="option-type">
+                            <option value="call">Call</option>
+                            <option value="put">Put</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
                         <label>Direction</label>
                         <select id="direction">
                             <option value="buy">Buy</option>
@@ -653,7 +672,9 @@
                         <label>Environment Task</label>
                         <select id="task-select">
                             <option value="vol_regime_detection">vol_regime_detection (Easy)</option>
+                            <option value="vertical_spread">vertical_spread (Medium)</option>
                             <option value="delta_hedging">delta_hedging (Medium)</option>
+                            <option value="straddle_trading">straddle_trading (Hard)</option>
                             <option value="earnings_vol_crush">earnings_vol_crush (Hard)</option>
                             <option value="gamma_scalping">gamma_scalping (Expert)</option>
                             <option value="vega_gamma_stress">vega_gamma_stress (Super-Boss)</option>
@@ -744,20 +765,59 @@
             const mat = parseInt(document.getElementById('maturity-idx').value);
             const dir = document.getElementById('direction').value;
             const qty = parseFloat(document.getElementById('quantity').value);
+            const stratType = document.getElementById('strategy-type').value;
+            const optType = document.getElementById('option-type').value;
 
-            log(`Executing: <strong>${dir.toUpperCase()}</strong> strike=${strike} mat=${mat} qty=${qty}`);
+            log(`Executing: <strong>${stratType.toUpperCase()}</strong> dir=${dir} strike=${strike} mat=${mat} opt=${optType} qty=${qty}`);
+
+            let bodyData = { reasoning: "Manual UI override" };
+
+            if (stratType === 'single') {
+                bodyData = {
+                    ...bodyData,
+                    selected_strike: strike,
+                    selected_maturity: mat,
+                    direction: dir,
+                    quantity: qty,
+                    option_type: optType,
+                    strategy_type: stratType
+                };
+            } else {
+                let legs = [];
+                if (stratType === 'straddle') {
+                    legs = [
+                        { strike_idx: strike, maturity_idx: mat, option_type: 'call', direction: dir, quantity: qty },
+                        { strike_idx: strike, maturity_idx: mat, option_type: 'put', direction: dir, quantity: qty }
+                    ];
+                } else if (stratType === 'strangle') {
+                    let strike2 = Math.min(7, strike + 2);
+                    legs = [
+                        { strike_idx: strike, maturity_idx: mat, option_type: 'put', direction: dir, quantity: qty },
+                        { strike_idx: strike2, maturity_idx: mat, option_type: 'call', direction: dir, quantity: qty }
+                    ];
+                } else if (stratType === 'vertical_spread') {
+                    let strike2 = Math.min(7, strike + 1);
+                    let dir2 = dir === 'buy' ? 'sell' : (dir === 'sell' ? 'buy' : 'hold');
+                    legs = [
+                        { strike_idx: strike, maturity_idx: mat, option_type: optType, direction: dir, quantity: qty },
+                        { strike_idx: strike2, maturity_idx: mat, option_type: optType, direction: dir2, quantity: qty }
+                    ];
+                } else if (stratType === 'calendar_spread') {
+                    let mat2 = Math.min(2, mat + 1);
+                    let dir2 = dir === 'buy' ? 'sell' : (dir === 'sell' ? 'buy' : 'hold');
+                    legs = [
+                        { strike_idx: strike, maturity_idx: mat, option_type: optType, direction: dir, quantity: qty },
+                        { strike_idx: strike, maturity_idx: mat2, option_type: optType, direction: dir2, quantity: qty }
+                    ];
+                }
+                bodyData = { ...bodyData, strategy_type: stratType, legs: legs };
+            }
 
             try {
                 const res = await fetch('/step', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        selected_strike: strike,
-                        selected_maturity: mat,
-                        direction: dir,
-                        quantity: qty,
-                        reasoning: "Manual UI override"
-                    })
+                    body: JSON.stringify(bodyData)
                 });
 
                 if (!res.ok) throw new Error(await res.text());
