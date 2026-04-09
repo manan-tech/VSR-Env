@@ -54,7 +54,7 @@ TASK_CONFIG = {
         "grader_class": VegaGammaStressGrader,
     },
     "vol_regime_detection": {
-        "max_steps": 1,
+        "max_steps": 3,
         "task_class": VolRegimeDetectionTask,
         "grader_class": VolRegimeDetectionGrader,
     },
