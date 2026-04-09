@@ -1,6 +1,6 @@
 # VSR-Env Difficulty Tasks (Adaptive Curriculum)
 
-VSR-Env transitions away from single-mode simulations in favor of a **5-tier adaptive difficulty curriculum**. Models are scored on an ascending scale of complexity; failure on earlier tasks halts the progression.
+VSR-Env transitions away from single-mode simulations in favor of a **7-tier adaptive difficulty curriculum**. Models are scored on an ascending scale of complexity; failure on earlier tasks halts the progression.
 
 ---
 
@@ -9,10 +9,12 @@ VSR-Env transitions away from single-mode simulations in favor of a **5-tier ada
 | Tier | Task Name | Max Steps | Key Skills | Difficulty |
 |---|---|---|---|---|
 | 1 | **Vol Regime Detection** | 3 | IV surface classification | Easy |
-| 2 | **Delta Hedging** | 8 | Greek neutrality, counter-trading | Medium |
-| 3 | **Earnings Vol Crush** | 13 | Temporal prediction, event timing | Hard |
-| 4 | **Gamma Scalping** | 17 | Dynamic re-hedging, profit scalping | Expert |
-| 5 | **Vega/Gamma Stress** | 20 | Multi-derivative optimization | Super-Boss |
+| 2 | **Vertical Spread** | 8 | Directional trading, defined risk | Medium |
+| 3 | **Delta Hedging** | 8 | Greek neutrality, counter-trading | Medium |
+| 4 | **Straddle Trading** | 13 | Volatility speculation, dual-leg execution | Hard |
+| 5 | **Earnings Vol Crush** | 13 | Temporal prediction, event timing | Hard |
+| 6 | **Gamma Scalping** | 17 | Dynamic re-hedging, profit scalping | Expert |
+| 7 | **Vega/Gamma Stress** | 20 | Multi-derivative optimization | Super-Boss |
 
 ---
 
@@ -68,7 +70,32 @@ Score: 0.15
 
 ---
 
-## Tier 2: Delta Hedging
+## Tier 2: Vertical Spread
+
+### Metadata
+- **Task ID**: `vertical_spread`
+- **Max Steps**: 8
+- **Pass Threshold**: Score ≥ 0.25
+
+### Objective
+Construct a directional vertical spread against moderate momentum.
+
+### Evaluation Formula
+```python
+payload_neutrality = max(0, 1.0 - abs(expected_delta - net_delta) / 0.5) * 0.4
+pnl_reward = sigmoid(pnl_change, scale=0.4) * 0.4
+reasoning_reward = score_reasoning_quality(...) * 0.2
+
+total = payload_neutrality + pnl_reward + reasoning_reward
+```
+
+### Mechanism
+- Evaluates directional bet correctness by rewarding PnL.
+- Delta profiling (payload neutrality) ensures risk is defined correctly via spreads rather than naked options.
+
+---
+
+## Tier 3: Delta Hedging
 
 ### Metadata
 - **Task ID**: `delta_hedging`
@@ -134,7 +161,32 @@ Total Score: 0.34 (marginal pass)
 
 ---
 
-## Tier 3: Earnings Vol Crush
+## Tier 4: Straddle Trading
+
+### Metadata
+- **Task ID**: `straddle_trading`
+- **Max Steps**: 13
+- **Pass Threshold**: Score ≥ 0.30
+
+### Objective
+Speculate on volatility expansions while remaining delta neutral.
+
+### Evaluation Formula
+```python
+delta_neutrality = max(0, 1.0 - abs(delta) / 0.1) * 0.4
+pnl_reward = sigmoid(pnl_change, scale=0.3) * 0.4
+reasoning_reward = score_reasoning_quality(...) * 0.2
+
+total = delta_neutrality + pnl_reward + reasoning_reward
+```
+
+### Mechanism
+- The agent must buy or sell straddles as an atomic strategy action.
+- Maintaining pure delta neutrality is heavily weighted, alongside capitalizing on raw volatility movements.
+
+---
+
+## Tier 5: Earnings Vol Crush
 
 ### Metadata
 - **Task ID**: `earnings_vol_crush`
@@ -143,8 +195,6 @@ Total Score: 0.34 (marginal pass)
 
 ### Objective
 Position the portfolio optimally before an earnings announcement, then manage risk after the implied volatility collapse.
-
-**Critical Event**: At **Step 6**, IV drops **40% uniformly** across all strikes and maturities (the "vol crush").
 
 ### Evaluation Formula
 ```python
@@ -194,7 +244,7 @@ Total Score: 0.22 (failed)
 
 ---
 
-## Tier 4: Gamma Scalping
+## Tier 6: Gamma Scalping
 
 ### Metadata
 - **Task ID**: `gamma_scalping`
@@ -261,7 +311,7 @@ Total Score: 0.28 (failed)
 
 ---
 
-## Tier 5: Vega/Gamma Stress (Super-Boss)
+## Tier 7: Vega/Gamma Stress (Super-Boss)
 
 ### Metadata
 - **Task ID**: `vega_gamma_stress`
@@ -367,7 +417,9 @@ Each task has a dedicated grader class:
 | Task | Grader Class | Location |
 |---|---|---|
 | Vol Regime Detection | `VolRegimeDetectionGrader` | `vsr_env/tasks/vol_regime_detection.py` |
+| Vertical Spread | `VerticalSpreadGrader` | `vsr_env/tasks/vertical_spread.py` |
 | Delta Hedging | `DeltaHedgingGrader` | `vsr_env/tasks/delta_hedging.py` |
+| Straddle Trading | `StraddleTradingGrader` | `vsr_env/tasks/straddle_trading.py` |
 | Earnings Vol Crush | `EarningsVolCrushGrader` | `vsr_env/tasks/earnings_vol_crush.py` |
 | Gamma Scalping | `GammaScalpingGrader` | `vsr_env/tasks/gamma_scalping.py` |
 | Vega/Gamma Stress | `VegaGammaStressGrader` | `vsr_env/tasks/vega_gamma_stress.py` |
@@ -387,7 +439,7 @@ class Grader:
 |---|---|---|
 | **Temporal Events** | ✅ Earnings, shocks at specific steps | ❌ Stationary dynamics |
 | **Multi-Dimensional State** | ✅ IV surface (8×3), Greeks, positions | ⚠️ Low-dim vectors |
-| **Curriculum** | ✅ 5-tier adaptive progression | ❌ Single difficulty |
+| **Curriculum** | ✅ 7-tier adaptive progression | ❌ Single difficulty |
 | **Reasoning Requirement** | ✅ Scored explicitly | ❌ Optional/ignored |
 | **Mathematical Optimality** | ✅ Gaussian boundaries, exact targets | ⚠️ Heuristic thresholds |
 | **Event Timing** | ✅ Must anticipate shocks | ❌ Reactive only |
@@ -397,7 +449,7 @@ class Grader:
 ## Why This Task Design Wins
 
 ### 1. **Depth Over Breadth**
-5 carefully designed tasks with increasing complexity, not 20 shallow variations.
+7 carefully designed tasks with increasing complexity, not 20 shallow variations.
 
 ### 2. **Real-World Relevance**
 Every task mirrors actual trading desk challenges:

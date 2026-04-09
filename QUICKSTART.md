@@ -43,11 +43,11 @@ python inference.py
 
 ```
 ============================================================
-VSR-Env 5-Tier Adaptive Curriculum
+VSR-Env 7-Tier Adaptive Curriculum
 ============================================================
-Tasks: 5
+Tasks: 7
 Episodes per task: 1
-Steps per episode: 3 → 8 → 13 → 17 → 20 (difficulty ladder)
+Steps per episode: 3 → 8 → 8 → 13 → 13 → 17 → 20 (difficulty ladder)
 ============================================================
 
 ────────────────────────────────────────────────────────────
@@ -94,13 +94,15 @@ TASK: vega_gamma_stress (20 steps)
 FINAL SUMMARY
 ============================================================
   vol_regime_detection        [ 3 steps]: 0.800 ✓ PASS
+  vertical_spread             [ 8 steps]: 0.350 ✓ PASS
   delta_hedging               [ 8 steps]: 0.750 ✓ PASS
+  straddle_trading            [13 steps]: 0.316 ✓ PASS
   earnings_vol_crush          [13 steps]: 0.684 ✓ PASS
   gamma_scalping              [17 steps]: 0.618 ✗ FAIL
   vega_gamma_stress           [20 steps]: 0.592 ✗ FAIL
 
-  Overall Average: 0.689
-  Success Rate: 60.0% (3/5)
+  Overall Average: 0.587
+  Success Rate: 71.4% (5/7)
 ============================================================
 ```
 
@@ -315,7 +317,7 @@ curl -X POST http://localhost:8000/step \
 ## 📚 Next Steps
 
 1. **Read the documentation**:
-   - `TASKS.md` - 5-tier curriculum details
+   - `TASKS.md` - 7-tier curriculum details
    - `REWARDS.md` - Grading formulas
    - `ARCHITECTURE.md` - System design
 

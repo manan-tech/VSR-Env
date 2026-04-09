@@ -86,7 +86,26 @@ Agent reasoning: "The IV surface shows baseline 0.30 vs typical 0.10, suggesting
 
 ---
 
-### Task 2: Delta Hedging
+### Task 2: Vertical Spread
+
+**Objective**: Construct appropriate directional spreads against moderate momentum.
+
+**Formula**:
+```python
+payload_neutrality = max(0, 1.0 - abs(expected_delta - net_delta) / 0.5) * 0.4
+pnl_reward = sigmoid(pnl_change, scale=0.4) * 0.4
+reasoning_reward = score_reasoning_quality(...) * 0.2
+
+total = payload_neutrality + pnl_reward + reasoning_reward
+```
+
+**Mechanism**:
+- Evaluates directional bet correctness by rewarding PnL.
+- Delta profiling (payload neutrality) ensures risk is defined correctly via spreads rather than naked options.
+
+---
+
+### Task 3: Delta Hedging
 
 **Objective**: Maintain |delta| < 0.05 through market shock
 
@@ -116,9 +135,28 @@ Step 2: Portfolio Delta = 0.08 (shock occurs, drifts to 0.12)
 
 ---
 
-### Task 3: Earnings Vol Crush
+### Task 4: Straddle Trading
 
-**Objective**: Liquidate vega before step 6 vol collapse, re-hedge after
+**Objective**: Speculate on volatility expansions while remaining delta neutral.
+
+**Formula**:
+```python
+delta_neutrality = max(0, 1.0 - abs(delta) / 0.1) * 0.4
+pnl_reward = sigmoid(pnl_change, scale=0.3) * 0.4
+reasoning_reward = score_reasoning_quality(...) * 0.2
+
+total = delta_neutrality + pnl_reward + reasoning_reward
+```
+
+**Mechanism**:
+- The agent must buy or sell straddles as an atomic strategy action.
+- Maintaining pure delta neutrality is heavily weighted, alongside capitalizing on raw volatility movements.
+
+---
+
+### Task 5: Earnings Vol Crush
+
+**Objective**: Liquidate vega before step 11 vol collapse, re-hedge after
 
 **Formula**:
 ```python
@@ -130,21 +168,21 @@ total = pnl_reward + delta_neutrality + reasoning_reward
 ```
 
 **Critical Event**:
-- **Step 6**: IV drops 40% uniformly across all strikes/maturities
+- **Step 11**: IV drops 40% uniformly across all strikes/maturities
 - Agent holding long vega → massive PnL loss
-- Agent must anticipate and liquidate vega-heavy positions by step 5
+- Agent must anticipate and liquidate vega-heavy positions by step 10
 
 **Sample Penalty**:
 ```
-Step 5: Portfolio Vega = 0.45
+Step 10: Portfolio Vega = 0.45
   (No action taken)
-Step 6: IV crush occurs, Vega PnL = -0.38
+Step 11: IV crush occurs, Vega PnL = -0.38
   Reward: 0.12 (pnl=-0.25 from vega loss, delta=0.22, reasoning=0.15)
 ```
 
 ---
 
-### Task 4: Gamma Scalping
+### Task 6: Gamma Scalping
 
 **Objective**: Profit from delta oscillations with high gamma exposure
 
@@ -176,7 +214,7 @@ Step 3: Spot=98, Delta=-1.6
 
 ---
 
-### Task 5: Vega/Gamma Stress (Super-Boss)
+### Task 7: Vega/Gamma Stress (Super-Boss)
 
 **Objective**: Achieve dual neutrality (|vega| < 0.05, |gamma| < 0.02) before catastrophic shock
 
@@ -201,18 +239,18 @@ total = vg_neutrality + pnl_reward + reasoning_reward
 
 **Sample Failure**:
 ```
-Step 5: Vega = 0.12, Gamma = 0.08
+Step 14: Vega = 0.12, Gamma = 0.08
   (Agent thinks it's neutral enough)
-Step 6: Shock occurs, portfolio loses 47%
+Step 15: Shock occurs, portfolio loses 47%
   vg_neutrality = (exp(-2.88) * 0.5 + exp(-8.0) * 0.5) * 0.5 = 0.016
   Reward: 0.18 (near-zero vg component)
 ```
 
 **Sample Success**:
 ```
-Step 5: Vega = 0.03, Gamma = 0.01
+Step 14: Vega = 0.03, Gamma = 0.01
   (Agent achieved dual neutrality)
-Step 6: Shock occurs, portfolio survives
+Step 15: Shock occurs, portfolio survives
   vg_neutrality = (exp(-0.18) * 0.5 + exp(-0.125) * 0.5) * 0.5 = 0.47
   Reward: 0.84 (high vg component)
 ```
@@ -314,6 +352,7 @@ Full implementation in `vsr_env/reward/reward_computer.py`:
 |---|---|---|
 | `compute_vol_regime_reward()` | Regime Detection | identification + reasoning |
 | `compute_delta_hedging_reward()` | Delta Hedging | delta_improvement + cost + neutrality + reasoning |
+| `compute_strategy_reward()` | Straddle / Vertical Spread | payload_neutrality + pnl + reasoning |
 | `compute_earnings_crush_reward()` | Earnings Vol Crush | pnl + delta_neutrality + reasoning |
 | `compute_gamma_scalping_reward()` | Gamma Scalping | delta_neutrality + pnl + reasoning |
 | `compute_vega_gamma_stress_reward()` | Vega/Gamma Stress | vg_neutrality + pnl + reasoning |

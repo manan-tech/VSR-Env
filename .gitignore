@@ -89,3 +89,6 @@ test_integration.py
 # Let uv lock be tracked if desired, but we can ignore it
 # uv.lock
 
+full_diff.txt
+MULTI_LEG_IMPLEMENTATION.md
+results.txt

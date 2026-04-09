@@ -27,6 +27,19 @@ DOMAIN_KEYWORDS = [
     "volatility",
     "arbitrage",
     "mispricing",
+    # Multi-leg strategy keywords
+    "straddle",
+    "strangle",
+    "spread",
+    "calendar",
+    "ironcondor",
+    "iron_condor",
+    "max_profit",
+    "breakeven",
+    "credit",
+    "debit",
+    "bull",
+    "bear",
 ]
 
 
@@ -510,3 +523,184 @@ class RewardComputer:
             pnl_component=pnl_reward,
             reasoning_component=reasoning_reward,
         )
+
+    # ========================================================================
+    # Multi-Leg Strategy Rewards
+    # ========================================================================
+
+    def compute_strategy_reward(
+        self,
+        action: "VSRAction",
+        state: "VSRState",
+        observation: "VSRObservation",
+        strategy_type: str,
+        prev_pnl: float,
+    ) -> "VSRReward":
+        """Compute reward for multi-leg strategy actions.
+
+        Provides unified reward computation for straddle, strangle, spread
+        and other multi-leg strategies.
+
+        Args:
+            action: Agent's action (should be multi-leg)
+            state: Current state with portfolio Greeks and P&L
+            observation: Current observation
+            strategy_type: Type of strategy ("straddle", "strangle", etc.)
+            prev_pnl: Portfolio P&L before the action
+
+        Returns:
+            VSRReward with total and component breakdown
+        """
+        from vsr_env.models import VSRReward
+
+        # Base components
+        pnl_change = state.portfolio_pnl - prev_pnl
+        pnl_reward = sigmoid(pnl_change, scale=0.3) * 0.3
+
+        # Strategy-specific evaluation
+        if strategy_type == "straddle":
+            strategy_reward = self._evaluate_straddle(action, state, observation)
+        elif strategy_type == "strangle":
+            strategy_reward = self._evaluate_strangle(action, state, observation)
+        elif strategy_type in ("vertical_spread", "spread"):
+            strategy_reward = self._evaluate_spread(action, state, observation)
+        elif strategy_type == "calendar_spread":
+            strategy_reward = self._evaluate_calendar(action, state, observation)
+        else:
+            strategy_reward = 0.3  # Default moderate score
+
+        # Reasoning component
+        reasoning_score = score_reasoning_quality(action.reasoning, observation, state)
+        reasoning_reward = reasoning_score * 0.2
+
+        # Efficiency bonus for using atomic multi-leg action
+        efficiency_bonus = 0.0
+        if hasattr(action, "strategy_type") and action.strategy_type is not None:
+            efficiency_bonus = 0.1
+
+        total = min(max(pnl_reward + strategy_reward + reasoning_reward + efficiency_bonus, 0.01), 0.99)
+
+        return VSRReward(
+            total=total,
+            pnl_component=pnl_reward,
+            greek_component=strategy_reward,
+            reasoning_component=reasoning_reward,
+        )
+
+    def _evaluate_straddle(
+        self, action: "VSRAction", state: "VSRState", observation: "VSRObservation"
+    ) -> float:
+        """Evaluate straddle strategy quality.
+
+        Scores based on:
+        - Delta neutrality (straddle should be delta-neutral)
+        - Correct vol direction (long vs short)
+        - Position sizing
+        """
+        delta_abs = abs(state.portfolio_delta)
+        delta_score = max(0.0, 1.0 - delta_abs / 0.3) * 0.3
+
+        # Vega exposure indicates vol direction
+        vega = state.portfolio_vega
+        if abs(vega) > 0.01:
+            # Has vol exposure
+            vol_exposure_score = 0.2 * min(abs(vega) / 0.1, 1.0)
+        else:
+            vol_exposure_score = 0.1
+
+        return delta_score + vol_exposure_score
+
+    def _evaluate_strangle(
+        self, action: "VSRAction", state: "VSRState", observation: "VSRObservation"
+    ) -> float:
+        """Evaluate strangle strategy quality.
+
+        Similar to straddle but with different strike selection considerations.
+        """
+        delta_abs = abs(state.portfolio_delta)
+        delta_score = max(0.0, 1.0 - delta_abs / 0.3) * 0.25
+
+        vega = state.portfolio_vega
+        vol_exposure_score = 0.2 * min(abs(vega) / 0.08, 1.0)
+
+        return delta_score + vol_exposure_score
+
+    def _evaluate_spread(
+        self, action: "VSRAction", state: "VSRState", observation: "VSRObservation"
+    ) -> float:
+        """Evaluate vertical spread strategy quality.
+
+        Scores based on:
+        - Directional exposure (spread should have delta)
+        - Risk management (defined risk characteristic)
+        """
+        delta = state.portfolio_delta
+
+        # For spreads, we expect directional exposure
+        if abs(delta) > 0.05:
+            direction_score = 0.2 * min(abs(delta) / 0.2, 1.0)
+        else:
+            direction_score = 0.0
+
+        # Gamma should be limited for spreads
+        gamma_abs = abs(state.portfolio_gamma)
+        gamma_score = 0.1 * max(0.0, 1.0 - gamma_abs / 0.05)
+
+        return direction_score + gamma_score
+
+    def _evaluate_calendar(
+        self, action: "VSRAction", state: "VSRState", observation: "VSRObservation"
+    ) -> float:
+        """Evaluate calendar spread strategy quality.
+
+        Scores based on term structure positioning.
+        """
+        # Calendar spreads benefit from term structure stability
+        delta_abs = abs(state.portfolio_delta)
+        delta_score = max(0.0, 1.0 - delta_abs / 0.3) * 0.2
+
+        # Vega should be positive for long calendars
+        vega = state.portfolio_vega
+        vega_score = 0.2 * min(abs(vega) / 0.05, 1.0)
+
+        return delta_score + vega_score
+
+    def compute_straddle_trading_reward(
+        self,
+        action: "VSRAction",
+        state: "VSRState",
+        observation: "VSRObservation",
+        prev_pnl: float,
+    ) -> "VSRReward":
+        """Compute reward specifically for straddle trading task.
+
+        Args:
+            action: Agent's action
+            state: Current state
+            observation: Current observation
+            prev_pnl: Previous P&L
+
+        Returns:
+            VSRReward instance
+        """
+        return self.compute_strategy_reward(action, state, observation, "straddle", prev_pnl)
+
+    def compute_vertical_spread_reward(
+        self,
+        action: "VSRAction",
+        state: "VSRState",
+        observation: "VSRObservation",
+        prev_pnl: float,
+    ) -> "VSRReward":
+        """Compute reward specifically for vertical spread task.
+
+        Args:
+            action: Agent's action
+            state: Current state
+            observation: Current observation
+            prev_pnl: Previous P&L
+
+        Returns:
+            VSRReward instance
+        """
+        return self.compute_strategy_reward(action, state, observation, "vertical_spread", prev_pnl)

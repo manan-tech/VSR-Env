@@ -66,9 +66,9 @@ Unlike standard classification or simple control environments, VSR-Env challenge
 | **Action Space** | See detailed table below |
 | **Observation** | IV surface grid + Greeks + PnL + positions + market sentiment |
 | **Reward Range** | Deterministic heuristic grading in `[0.01, 0.99]` |
-| **Difficulty Tiers** | 5 levels (Easy → Super-Boss) with early-stopping curriculum |
+| **Difficulty Tiers** | 7 levels (Easy → Super-Boss) with early-stopping curriculum |
 | **Episode Length** | 3-20 steps per episode (task-dependent difficulty) |
-| **Total Episodes** | 5 (one per task) |
+| **Total Episodes** | 7 (one per task) |
 | **Grading** | Gaussian boundaries, delta neutrality, PnL-weighted |
 
 ### Action Space Details
@@ -90,9 +90,34 @@ The continuous action space has 4 dimensions:
 
 **Example**: `action(strike=4, maturity=1, direction="sell", quantity=2.5)` = Sell 2.5 contracts of the 100-strike, 90-day option.
 
+### Multi-Leg Strategy Support (NEW)
+
+VSR-Env now supports **atomic multi-leg options strategies** for more realistic trading:
+
+| Strategy | Legs | Use Case | Greek Profile |
+|----------|------|----------|---------------|
+| **Straddle** | 2 | Volatility speculation | Near-zero delta, long gamma/vega |
+| **Strangle** | 2 | Cheaper vol bet | Near-zero delta, reduced gamma |
+| **Vertical Spread** | 2 | Directional with defined risk | Net delta, limited gamma/vega |
+| **Calendar Spread** | 2 | Term structure bet | Positive theta, long vega |
+
+**Multi-Leg Action Example**:
+```python
+action = VSRAction(
+    strategy_type=StrategyType.STRADDLE,
+    legs=[
+        StrategyLeg(strike_idx=4, maturity_idx=1, option_type="call", direction="buy", quantity=1.0),
+        StrategyLeg(strike_idx=4, maturity_idx=1, option_type="put", direction="buy", quantity=1.0),
+    ],
+    reasoning="Long straddle for volatility expansion"
+)
+```
+
+See [STRATEGIES.md](STRATEGIES.md) for comprehensive documentation.
+
 ---
 
-## 📚 5-Tier Adaptive Curriculum
+## 📚 7-Tier Adaptive Curriculum
 
 ### Tier 1: **Volatility Regime Detection** (Easy)
 - **Max Steps**: 3
@@ -100,22 +125,32 @@ The continuous action space has 4 dimensions:
 - **Ambiguity Cases**: Surface may have mixed signals (high short-term IV, low long-term IV) requiring 2-3 classification steps
 - **Skills**: Pattern recognition, surface reading, temporal stability assessment
 
-### Tier 2: **Delta Hedging** (Medium)
+### Tier 2: **Vertical Spread** (Medium)
+- **Max Steps**: 8
+- **Challenge**: Construct appropriate directional spreads against moderate momentum
+- **Skills**: Directional trading, defined risk, payload neutrality
+
+### Tier 3: **Delta Hedging** (Medium)
 - **Max Steps**: 8
 - **Challenge**: Maintain |delta| < 0.05 through market shock
 - **Skills**: Delta neutrality, counter-trading, cost efficiency
 
-### Tier 3: **Earnings Vol Crush** (Hard)
+### Tier 4: **Straddle Trading** (Hard)
 - **Max Steps**: 13
-- **Challenge**: Position for IV collapse at step 6, then re-hedge
+- **Challenge**: Speculate on volatility expansions while remaining delta neutral
+- **Skills**: Volatility speculation, dual-leg execution
+
+### Tier 5: **Earnings Vol Crush** (Hard)
+- **Max Steps**: 13
+- **Challenge**: Position for IV collapse at step 11, then re-hedge
 - **Skills**: Temporal prediction, vega management, event timing
 
-### Tier 4: **Gamma Scalping** (Expert)
+### Tier 6: **Gamma Scalping** (Expert)
 - **Max Steps**: 17
 - **Challenge**: Profit from delta oscillations with high gamma
 - **Skills**: Dynamic re-hedging, theta management, trade timing
 
-### Tier 5: **Vega/Gamma Stress** (Super-Boss)
+### Tier 7: **Vega/Gamma Stress** (Super-Boss)
 - **Max Steps**: 20
 - **Challenge**: Achieve dual neutrality (|vega| < 0.05 AND |gamma| < 0.02) before catastrophic shock
 - **Skills**: Multi-derivative hedging, Gaussian boundary optimization, risk decomposition
@@ -173,7 +208,7 @@ Step 3 Result:
 ### 4. **Event-Driven Temporal Logic**
 
 Tasks include non-stationary events:
-- **Earnings vol crush** at step 6: IV drops 40% instantly
+- **Earnings vol crush** at step 11: IV drops 40% instantly
 - **Macro volatility shock** at step 8: Spot crashes, IV spikes
 - **Brownian drift** throughout: Gaussian noise on spot/IV
 
@@ -213,7 +248,7 @@ See `QUICKSTART.md` for detailed setup.
 | Document | Purpose |
 |---|---|
 | **[REWARDS.md](REWARDS.md)** | Reward V2 architecture, Gaussian grading, reasoning scoring |
-| **[TASKS.md](TASKS.md)** | 5-tier curriculum with mathematical objectives |
+| **[TASKS.md](TASKS.md)** | 7-tier curriculum with mathematical objectives |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | System diagrams, component breakdown, data flow |
 | **[QUICKSTART.md](QUICKSTART.md)** | 3-step setup guide with troubleshooting |
 
@@ -277,13 +312,14 @@ python test_ws.py               # WebSocket protocol test
 openenv validate
 ```
 
-**Test Suite: 65 Tests Total**
-- ✅ **62 Unit Tests** (`tests/`)
+**Test Suite: 102 Tests Total**
+- ✅ **102 Unit Tests** (`tests/`)
+  - `test_multi_leg_strategies.py` (40 tests) — Strategy classes, multi-leg actions, portfolio support
   - `test_reward_computer.py` (23 tests) — Gaussian boundaries, reasoning quality, edge cases
-  - `test_task_handlers.py` (21 tests) — All 5 task graders, state transitions, events
+  - `test_task_handlers.py` (21 tests) — All 7 task graders, state transitions, events
   - `test_environment.py` (18 tests) — Core orchestration, observation space, action validation
 - ✅ **3 Integration Tests** (root directory)
-  - `test_integration.py` — End-to-end validation of all 5 tasks with full episodes
+  - `test_integration.py` — End-to-end validation of all 7 tasks with full episodes
   - `test_client.py` — LocalVSREnv client reset/step operations
   - `test_ws.py` — WebSocket protocol compliance
 
@@ -300,7 +336,7 @@ openenv validate
 $ openenv validate
 [OK] VSR-Env: Ready for deployment
      ✓ Valid openenv.yaml manifest
-     ✓ All 5 tasks callable via /reset/{task_id}
+     ✓ All 7 tasks callable via /reset/{task_id}
      ✓ WebSocket endpoint functional at /ws
      ✓ Action/Observation schemas valid
      ✓ Reward range in [0.0, 1.0]
@@ -312,7 +348,7 @@ $ openenv validate --url https://huggingface.co/spaces/MananBansal/VSR-Env
      ✓ Reset endpoint functional
      ✓ Step endpoint accepts valid actions
      ✓ State endpoint returns metadata
-     ✓ All 5 tasks accessible
+     ✓ All 7 tasks accessible
      ✓ Schema endpoint validates models
 ```
 
@@ -326,24 +362,31 @@ $ openenv validate --url https://huggingface.co/spaces/MananBansal/VSR-Env
 
 ## 📊 Benchmark Results
 
-Comprehensive evaluation across 5 frontier models:
+Comprehensive evaluation across 5 frontier models on the 7-tier curriculum:
 
-| Model | Task 1<br/>Easy (3 steps) | Task 2<br/>Medium (8 steps) | Task 3<br/>Hard (13 steps) | Task 4<br/>Expert (17 steps) | Task 5<br/>Super-Boss (20 steps) | Overall<br/>Success |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Kimi K2.5** | 0.990 ✓ | 0.915 ✓ | 0.400 ✓ | 0.683 ✓ | 0.221 ✓ | **100%** (5/5) |
-| **Llama 3.3 70B Versatile** | 0.990 ✓ | 0.458 ✓ | 0.650 ✓ | 0.491 ✓ | 0.200 ✓ | **100%** (5/5) |
-| **Mistral Large 3** | 0.990 ✓ | 0.253 ✓ | 0.400 ✓ | 0.623 ✓ | 0.207 ✓ | **100%** (5/5) |
-| **Amazon Nova Pro v1** | 0.990 ✓ | 0.671 ✓ | 0.650 ✓ | 0.042 ✗ | 0.151 ✓ | **80%** (4/5) |
-| **Llama 3.1 8B Instant** | 0.010 ✗ | 0.575 ✓ | 0.650 ✓ | 0.544 ✓ | 0.100 ✓ | **80%** (4/5) |
+| Model | T1 (3s) | T2 (8s) | T3 (8s) | T4 (13s) | T5 (13s) | T6 (17s) | T7 (20s) | Overall | Success |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Kimi K2.5** | 0.010 ✗ | 0.300 ✓ | 0.915 ✓ | 0.316 ✓ | 0.400 ✓ | 0.704 ✓ | 0.100 ✓ | 0.392 | **85.7%** |
+| **Mistral Large 3** | 0.990 ✓ | 0.300 ✓ | 0.689 ✓ | 0.316 ✓ | 0.010 ✗ | 0.259 ✓ | 0.100 ✓ | 0.381 | **85.7%** |
+| **Amazon Nova Pro v1** | 0.990 ✓ | 0.350 ✓ | 0.689 ✓ | 0.316 ✓ | 0.510 ✓ | 0.359 ✓ | 0.220 ✓ | 0.481 | **100%** |
+| **Llama 3.3 70B** | 0.990 ✓ | 0.300 ✓ | 0.668 ✓ | 0.316 ✓ | 0.650 ✓ | 0.107 ✓ | 0.111 ✓ | 0.449 | **100%** |
+| **Llama 3.1 8B** | 0.010 ✗ | 0.250 ✓ | 0.630 ✓ | 0.240 ✓ | 0.650 ✓ | 0.544 ✓ | 0.100 ✓ | 0.346 | **85.7%** |
 
-**Key Findings:**
-- **3 models achieve 100% success**: Kimi K2.5, Llama 3.3 70B, Mistral Large 3
-- **Kimi K2.5 leads average score** at 0.642 with strongest delta hedging (0.915)
-- **Llama 3.3 70B balances** all tasks well (0.558 avg), strong on earnings (0.650)
-- **Llama 3.1 8B fails Easy tier** (0.010 on vol detection) — only model to fail Task 1
-- **Nova Pro struggles with Expert tier** (gamma scalping: 0.042) despite strong delta hedging
-- **Super-Boss tier challenges all models** — scores range 0.100–0.221
-- **Expert tier shows 16× variance** between best (Kimi: 0.683) and worst (Nova: 0.042)
+*(T1: Vol Regime Detection, T2: Vertical Spread, T3: Delta Hedging, T4: Straddle Trading, T5: Earnings Vol Crush, T6: Gamma Scalping, T7: Vega/Gamma Stress)*
+
+> *Benchmark results cover the original 5-tier curriculum. Tiers 2 (Vertical Spread) and 4 (Straddle Trading) were added post-benchmark.*
+
+Super-Boss pass threshold is ≥ 0.10. Low scores are by design — Gaussian boundary grading mathematically caps achievable scores when dual-neutrality isn't reached, making this tier a frontier-model stress test rather than a pass/fail gate.
+
+## ⚠️ Known Limitations
+
+- **Tier 1 differentiates models**: Vol Regime Detection shows significant variance — Kimi K2.5 and Llama 3.1 8B both score 0.010 (failures), while other models score 0.99+. This validates its role as a curriculum diagnostic, not just a gate.
+- **Single-Leg Action Assumption in Baseline**: The current `inference.py` loop expects agents to 
+  return single-leg atomic actions. The `vsr_env` core fully supports multi-leg strategy 
+  objects (straddles, spreads), but this must be explicitly integrated into the agent loop 
+  by participants.
+- **Strict Gaussian Boundaries**: The Super-Boss tier (Vega/Gamma Stress) intentionally zeroes out scores if 
+  net Greeks drift past 0.05 (Vega) or 0.02 (Gamma), punishing directionally correct but mathematically imprecise hedges.
 
 ---
 

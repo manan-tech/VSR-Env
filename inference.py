@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
-from vsr_env.models import TradeDirection, VSRAction, VSRObservation
+from vsr_env.models import TradeDirection, VSRAction, VSRObservation, StrategyType, StrategyLeg
 from vsr_env.server.vsr_environment import VSREnvironment
 
 # Environment configuration
@@ -38,11 +38,13 @@ BENCHMARK = "vsr_env"
 
 # Task configurations (Requirements: 12.2, 12.6)
 TASKS = [
-    "vol_regime_detection",
-    "delta_hedging",
-    "earnings_vol_crush",
-    "gamma_scalping",
-    "vega_gamma_stress",
+    "vol_regime_detection",  # Easy: 3 steps
+    "vertical_spread",       # Medium: 6 steps
+    "delta_hedging",         # Medium: 8 steps
+    "straddle_trading",      # Hard: 8 steps
+    "earnings_vol_crush",    # Hard: 13 steps
+    "gamma_scalping",        # Expert: 17 steps
+    "vega_gamma_stress",     # Super-Boss: 20 steps
 ]
 
 # Number of episodes to run per task (standard: 1 episode per task)
@@ -52,6 +54,8 @@ EPISODE_COUNTS = {
     "earnings_vol_crush": 1,
     "gamma_scalping": 1,
     "vega_gamma_stress": 1,
+    "straddle_trading": 1,
+    "vertical_spread": 1,
 }
 
 # Max steps per episode for each task (episode length)
@@ -62,6 +66,8 @@ MAX_STEPS_PER_TASK = {
     "earnings_vol_crush": 13,       # Hard: 13 steps
     "gamma_scalping": 17,           # Expert: 17 steps
     "vega_gamma_stress": 20,        # Super-Boss: 20 steps
+    "straddle_trading": 13,          # Hard: 8 steps (multi-leg)
+    "vertical_spread": 8           # Medium: 6 steps (multi-leg)
 }
 
 # Fixed seeds for reproducibility (one per task)
@@ -71,11 +77,13 @@ TASK_SEEDS = {
     "earnings_vol_crush": 303,
     "gamma_scalping": 404,
     "vega_gamma_stress": 505,
+    "straddle_trading": 606,
+    "vertical_spread": 707,
 }
 
 # LLM configuration
 TEMPERATURE = 0.3
-MAX_TOKENS = 800
+MAX_TOKENS = 250
 
 # Success threshold
 SUCCESS_SCORE_THRESHOLD = 0.1
@@ -167,6 +175,45 @@ SYSTEM_PROMPTS = {
         
         Respond ONLY with a valid JSON object (no markdown, no extra text):
         {"strike_idx": 4, "maturity_idx": 1, "direction": "buy", "quantity": 2.0, "reasoning": "Your detailed analysis here."}
+        """).strip(),
+    "straddle_trading": textwrap.dedent("""
+        You are a volatility trader analyzing implied volatility for speculation.
+
+        Current IV is elevated. You must decide whether to go LONG VOLATILITY (buy straddle)
+        or SHORT VOLATILITY (sell straddle) based on your assessment of realized vol.
+
+        A STRADDLE is an ATM strategy: buy call + buy put at the same strike and expiry.
+        - Long straddle profits when realized vol > implied vol
+        - Short straddle profits when realized vol < implied vol
+
+        You can execute a straddle atomically using multi-leg actions:
+        {"strategy_type": "straddle", "legs": [{"strike_idx": 4, "maturity_idx": 1, "option_type": "call", "direction": "buy", "quantity": 1.0}, {"strike_idx": 4, "maturity_idx": 1, "option_type": "put", "direction": "buy", "quantity": 1.0}], "reasoning": "Your analysis"}
+
+        OR use single-leg actions for each leg separately.
+
+        The option chain has:
+        - 8 strikes: [85, 90, 95, 97.5, 100, 102.5, 105, 110] (indices 0-7)
+        - 3 maturities: [30, 90, 180] days (indices 0-2)
+
+        Respond ONLY with a valid JSON object (no markdown, no extra text).
+        """).strip(),
+    "vertical_spread": textwrap.dedent("""
+        You are a directional options trader. The market has a clear directional bias.
+
+        Construct a VERTICAL SPREAD for a directional bet with defined risk:
+        - BULL CALL SPREAD: Buy lower strike call, sell higher strike call (bullish)
+        - BEAR PUT SPREAD: Buy higher strike put, sell lower strike put (bearish)
+
+        You can execute a spread atomically using multi-leg actions:
+        {"strategy_type": "vertical_spread", "legs": [{"strike_idx": 3, "maturity_idx": 1, "option_type": "call", "direction": "buy", "quantity": 1.0}, {"strike_idx": 5, "maturity_idx": 1, "option_type": "call", "direction": "sell", "quantity": 1.0}], "reasoning": "Your analysis"}
+
+        Choose strikes to maximize profit potential within your directional view.
+
+        The option chain has:
+        - 8 strikes: [85, 90, 95, 97.5, 100, 102.5, 105, 110] (indices 0-7)
+        - 3 maturities: [30, 90, 180] days (indices 0-2)
+
+        Respond ONLY with a valid JSON object (no markdown, no extra text).
         """).strip(),
 }
 
@@ -264,6 +311,8 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
     3. Find JSON object in text
     4. Repair truncated JSON (e.g. cut off by max_tokens)
     Returns safe default (hold action) on all failures.
+
+    Now supports multi-leg strategy actions with strategy_type and legs fields.
     """
     default = {
         "strike_idx": 0,
@@ -271,6 +320,8 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
         "direction": "hold",
         "quantity": 0.0,
         "reasoning": "",
+        "strategy_type": None,
+        "legs": None,
     }
 
     if not response_text:
@@ -282,6 +333,9 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
     try:
         parsed = json.loads(text)
         if isinstance(parsed, dict):
+            # Check if it's a multi-leg strategy action
+            if "strategy_type" in parsed and "legs" in parsed:
+                return {**default, **parsed}
             # Check if it's a flat action dict (has strike_idx)
             if "strike_idx" in parsed:
                 return {**default, **parsed}
@@ -429,6 +483,7 @@ def get_model_response_with_trajectory(
     import sys
 
     system_prompt = SYSTEM_PROMPTS.get(task_name, SYSTEM_PROMPTS["delta_hedging"])
+    system_prompt += "\n\nCRITICAL: Keep your 'reasoning' field to a single, condensed sentence (under 15 words) to save tokens."
 
     # Build base prompt
     user_prompt = build_prompt(observation, step)
@@ -495,6 +550,7 @@ def get_model_response(
     import sys
 
     system_prompt = SYSTEM_PROMPTS.get(task_name, SYSTEM_PROMPTS["delta_hedging"])
+    system_prompt += "\n\nCRITICAL: Keep your 'reasoning' field to a single, condensed sentence (under 15 words) to save tokens."
     user_prompt = build_prompt(observation, step)
 
     max_retries = 3
@@ -545,7 +601,38 @@ def create_action(parsed: Dict[str, Any]) -> VSRAction:
     """Create VSRAction from parsed LLM response.
 
     Maps direction string to TradeDirection enum and ensures types are correct.
+    Handles both single-leg and multi-leg strategy actions.
     """
+    # Check for multi-leg strategy action first
+    strategy_type = parsed.get("strategy_type")
+    legs_raw = parsed.get("legs")
+
+    if strategy_type and legs_raw:
+        # Multi-leg strategy action
+        try:
+            st = StrategyType(strategy_type) if isinstance(strategy_type, str) else strategy_type
+            legs = []
+            for leg_data in legs_raw:
+                if isinstance(leg_data, dict):
+                    leg = StrategyLeg(
+                        strike_idx=max(0, min(7, int(leg_data.get("strike_idx", 0)))),
+                        maturity_idx=max(0, min(2, int(leg_data.get("maturity_idx", 0)))),
+                        option_type=leg_data.get("option_type", "call"),
+                        direction=leg_data.get("direction", "buy"),
+                        quantity=max(0.0, min(10.0, float(leg_data.get("quantity", 1.0)))),
+                    )
+                    legs.append(leg)
+
+            return VSRAction(
+                strategy_type=st,
+                legs=legs,
+                reasoning=str(parsed.get("reasoning") or ""),
+            )
+        except Exception:
+            # Fall through to single-leg action if multi-leg parsing fails
+            pass
+
+    # Single-leg action
     # Map direction string to enum
     direction_str = str(parsed.get("direction") or "hold").lower()
 
@@ -625,7 +712,14 @@ def format_diagnostic_block(
         Formatted diagnostic block string
     """
     block = f"Step {step} Result:\n"
-    block += f"  Action: {action.direction.value}(strike={action.selected_strike}, maturity={action.selected_maturity}, qty={action.quantity:.1f})\n"
+
+    # Handle multi-leg strategy actions
+    if action.strategy_type and action.legs:
+        block += f"  Action: {action.strategy_type.value} strategy\n"
+        for i, leg in enumerate(action.legs):
+            block += f"    Leg {i+1}: {leg.direction} {leg.quantity:.1f} {leg.option_type}(strike={leg.strike_idx}, maturity={leg.maturity_idx})\n"
+    else:
+        block += f"  Action: {action.direction.value}(strike={action.selected_strike}, maturity={action.selected_maturity}, qty={action.quantity:.1f})\n"
     block += f"  Your Logic: \"{action.reasoning}\"\n"
 
     # Format reward with components
@@ -776,11 +870,12 @@ async def main() -> None:
     task_scores = {}
 
     print("\n" + "="*60)
-    print("VSR-Env 5-Tier Adaptive Curriculum")
+    print("VSR-Env 7-Tier Adaptive Curriculum")
     print("="*60)
     print(f"Tasks: {len(TASKS)}")
     print(f"Episodes per task: 1")
     print(f"Steps per episode: 3 → 8 → 13 → 17 → 20 (difficulty ladder)")
+    print(f"Including multi-leg strategy tasks (straddle, spread)")
     print("="*60)
 
     # Run each task once (one episode per task, multiple steps per episode)

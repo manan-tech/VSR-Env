@@ -58,6 +58,24 @@ VSR-Env follows a clean 3-layer architecture designed for **transparency, reprod
 │  • earnings_vol_crush.py     → Event timing, vega management     │
 │  • gamma_scalping.py         → Dynamic re-hedging                │
 │  • vega_gamma_stress.py      → Multi-derivative optimization     │
+│  • straddle_trading.py      → Vol speculation (NEW)             │
+│  • vertical_spread.py       → Directional spreads (NEW)         │
+└───────────────────────────┬────────────────────────────────────────┘
+                            │ Uses strategy objects
+                            ▼
+┌────────────────────────────────────────────────────────────────────┐
+│          Strategy Layer (vsr_env/strategies/)                      │
+│                                                                    │
+│  Multi-leg strategy support for realistic trading:                │
+│  • base.py          → OptionStrategy abstract base class          │
+│  • straddle.py      → ATM straddle (call + put, same strike)      │
+│  • strangle.py      → OTM strangle (different strikes)            │
+│  • spread.py        → Vertical and Calendar spreads               │
+│                                                                    │
+│  Features:                                                         │
+│  • Atomic multi-leg execution                                     │
+│  • Strategy-level Greek aggregation                               │
+│  • Payoff and breakeven computation                               │
 └───────────────────────────┬────────────────────────────────────────┘
                             │ Calls for reward computation
                             ▼
@@ -351,9 +369,10 @@ vsr_env/
 │   ├── __init__.py
 │   ├── vol_regime_detection.py          # Tier 1 task + grader
 │   ├── delta_hedging.py                 # Tier 2 task + grader
-│   ├── earnings_vol_crush.py            # Tier 3 task + grader
-│   ├── gamma_scalping.py                # Tier 4 task + grader
-│   └── vega_gamma_stress.py             # Tier 5 task + grader
+│   ├── straddle_trading.py              # Tier 4 task + grader
+│   ├── earnings_vol_crush.py            # Tier 5 task + grader
+│   ├── gamma_scalping.py                # Tier 6 task + grader
+│   └── vega_gamma_stress.py             # Tier 7 task + grader
 ├── server/
 │   ├── __init__.py
 │   ├── app.py                           # FastAPI routes
